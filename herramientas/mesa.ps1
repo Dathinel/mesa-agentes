@@ -24,7 +24,7 @@
 #   bitacora [-Fecha AAAA-MM-DD]      (el día en español llano)   |   limpiar   (archiva reclamos caducados y restos)
 param(
   [Parameter(Position = 0, Mandatory = $true)]
-  [ValidateSet('abrir','enviar','leer','lider','hilos','pendientes','aprobar','rechazar','cuota','llamadas','foto','actividad','alertas','sugerir-lider','reclamar','reclamos','soltar','entregar','revisar','archivar','entregas','tareas','avance','reintentar','cortar','diagnostico','bitacora','limpiar')]
+  [ValidateSet('abrir','enviar','leer','lider','hilos','pendientes','aprobar','rechazar','cuota','llamadas','foto','actividad','alertas','sugerir-lider','reclamar','reclamos','soltar','entregar','revisar','archivar','entregas','tareas','avance','reintentar','cortar','cerrar','diagnostico','bitacora','limpiar')]
   [string]$Comando,
 
   [string]$Tarea,
@@ -164,6 +164,21 @@ switch ($Comando) {
     # El Job de ejecutar.ps1 recoge todos los descendientes al morir su raíz, incluso si ya quedaron huérfanos.
     try { Stop-Process -Id $ll.cli_pid -Force -ErrorAction Stop } catch { Remove-Item -LiteralPath $marca -ErrorAction SilentlyContinue; throw }
     Write-Output "CORTADO #$N`: CLI $($ll.cli_pid) ($($ll.cli_nombre)) y sus descendientes. Es un corte a propósito, no un fallo. Para relanzarlo: mesa.ps1 reintentar -Hilo $Hilo -N $N -De $De"
+  }
+  'cerrar' {
+    # Cierra un hilo terminado: sin encargos sin terminar ni entregas sin aceptar. Si hay algo, no cierra y dice qué falta.
+    if (-not $Hilo -or -not $De) { throw 'Uso: mesa.ps1 cerrar -Hilo <id> -De <líder>' }
+    $carpeta = Join-Path $Global:Mesa_Hilos $Hilo
+    $h = Mesa-LeerJson (Join-Path $carpeta 'hilo.json')
+    if (-not $h) { throw "No existe el hilo '$Hilo'" }
+    Exigir-Lider $h $De
+    $vivos = @(Get-ChildItem -LiteralPath $carpeta -Filter '*-*.json' -File | ForEach-Object { Mesa-LeerMensaje $_.FullName } | Where-Object { $_ -and $_.tipo -eq 'encargo' -and $_.estado -in @('aprobado', 'pendiente', 'ejecutando', 'escalado', 'huerfano') })
+    if ($vivos.Count) { throw "No se cierra: hay encargos sin terminar: #$(($vivos | ForEach-Object { $_.n }) -join ', #')." }
+    $sinAceptar = @(Get-ChildItem -LiteralPath (Join-Path $carpeta 'entregas') -Filter '*.json' -ErrorAction SilentlyContinue | ForEach-Object { Mesa-LeerMensaje $_.FullName } | Where-Object { $_.estado -notin @('aceptada', 'archivada') })
+    if ($sinAceptar.Count) { throw "No se cierra: hay entregas sin aceptar: $(($sinAceptar | ForEach-Object { $_.tarea }) -join ', ')." }
+    Mesa-ActualizarHilo $carpeta { param($x) $x.estado = 'cerrado'; $x.actualizado = (Mesa-IsoNow) } | Out-Null
+    Nota-Hilo $carpeta $De 'todos' 'archivo' "Hilo cerrado por ${De}: sin encargos sin terminar ni entregas sin aceptar." @() | Out-Null
+    Write-Output "CERRADO $Hilo"
   }
   'diagnostico' {
     # Por cmd: codex es un .ps1/.cmd de npm que escribe avisos en stderr y, con ErrorAction Stop, parecía no estar.
