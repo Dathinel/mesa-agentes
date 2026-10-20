@@ -1,0 +1,4 @@
+Prueba 5: franja de la oficina (DOM renderizado, modo normal) frente al tablero
+Oficina: Trabajando=1; Libre=2; Esperando a Daniel=0; Sin cuota=0; Caído=0; Apagado=0; Te necesito=0
+Tablero: Trabajando=1; Libre=2; Esperando a Daniel=0; Sin cuota=0; Caído=0; Apagado=0; Te necesito=0
+Coinciden: True

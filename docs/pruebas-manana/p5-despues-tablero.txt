@@ -1,0 +1,55 @@
+﻿Mesa de agentes · 2026-10-20 11:51:22 · cada 5 s
+[90mSupervisor: vivo (hace 20 s) · aprobación: por-tipo (sin esperar: lectura, mesa, relevo)[0m
+[mFranja: Trabajando 1 · Libre 2 · Esperando a Daniel 0 · Sin cuota 0[0m
+[m        Caído 0 · Apagado 0 · Te necesito: 0[0m
+Agentes
+[33mclaude | líder de 3 hilos | libre          | publicable         | ?            | cuota 94,8%[0m
+[92mcodex  | agente           | libre          | manana-prueba2-co… | hace 21 s    | cuota 91% | wt 2/3[0m
+[96magy    | agente           | trabajando     | -                  | hace 23 s    | cuota 51% | wt 1/3[0m
+
+Esperan a daniel
+  20261017-encargo-encargo-oficina-2 #2 agy -> claude
+  Entrega de Oficina v2 a pantalla completa con pruebas graficas 1920x1080 supera…
+  20261017-encargo-encargo-oficina-3 #2 agy -> claude
+  Oficina v2.1 completada: arquitectura de planta 100vh sin scroll con HUD plegab…
+  20261018-encargo-encargo-v3-visua #2 agy -> claude
+  Entrega de la Oficina v3 visual con interacción completa, decoraciones, catálog…
+
+Tareas por estado
+  entregada: 4
+    20261019-ronda-2-pendientes-y-ver / publicable (claude)
+    20261019-ronda-2-pendientes-y-ver / vista-resumen (agy)
+    charla-codex / arranque-claude (codex)
+    charla-codex / revision-alertas-altas (codex)
+  devuelta: 0
+  aceptada: 19
+    20261018-cubre-jeringas-10-ml-inf / modelado-blender (claude)
+    20261018-cubre-jeringas-10-ml-inf / verificar-fundas-v2 (agy)
+    20261018-cubre-jeringas-10-ml-inf / verificar-fundas (agy)
+    20261018-cubre-jeringas-10-ml-inf / vigia-ambito (codex)
+    20261018-prueba-de-coordinacion-p / sync-inicio (claude)
+    20261019-mesa-lista-para-github-d / descripcion (agy)
+    20261019-mesa-lista-para-github-d / mesa-github (claude)
+    20261019-mesa-lista-para-github-d / panel-ligero (codex)
+    20261019-mesa-lista-para-github-d / tablero (codex)
+    20261019-mesa-lista-para-github-d / verificar-bloque (codex)
+    20261019-ronda-2-pendientes-y-ver / arquitectura (claude-sonnet)
+    20261019-ronda-2-pendientes-y-ver / identidad-agy (agy)
+    20261019-ronda-2-pendientes-y-ver / interfaz-agy (agy)
+    20261019-ronda-2-pendientes-y-ver / lanzador-r2 (codex)
+    20261019-ronda-2-pendientes-y-ver / lanzador (codex)
+    20261019-ronda-2-pendientes-y-ver / manana-prueba2-codex (codex)
+    20261019-ronda-2-pendientes-y-ver / manana-vigia-codex (codex)
+    20261019-ronda-2-pendientes-y-ver / panel-web (agy)
+    20261019-ronda-2-pendientes-y-ver / ruido-vigia (claude-sonnet)
+  archivada: 6
+  ejecutando: 1
+    20261019-ronda-2-pendientes-y-ver #112 -> agy · hace 3 min
+
+Alertas
+[91m  2026-10-20T16:40:58.460Z claude: Borrado recursivo con destino que requiere revisión[0m
+[91m  2026-10-20T05:27:06.323Z claude: Escritura en panel/herramientas sin reclamo propio para esa ruta[0m
+[91m  2026-10-20T05:25:17.066Z claude: Borrado recursivo con destino que requiere revisión[0m
+[91m  2026-10-20T05:24:36.373Z claude: Borrado recursivo con destino que requiere revisión[0m
+[91m  2026-10-20T05:22:59.168Z claude: Escritura en panel/herramientas sin reclamo propio para esa ruta[0m
+
