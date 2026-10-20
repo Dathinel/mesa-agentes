@@ -1,0 +1,205 @@
+{
+  "version": 1,
+  "planes": {
+    "claude": "Claude",
+    "codex": "ChatGPT",
+    "agy": "Google AI"
+  },
+  "defecto": {
+    "personalidad": "El explorador",
+    "ropa": "ligera",
+    "color": "#8e9cb4",
+    "para": "modelo nuevo; edita su ficha en personajes.json",
+    "velocidad": 1,
+    "frase": "Preparando mi despacho."
+  },
+  "modelos": [
+    {
+      "agente": "claude",
+      "patrones": [
+        "claude-opus-*",
+        "opus"
+      ],
+      "personalidad": "El estratega",
+      "ropa": "traje",
+      "color": "#393e59",
+      "accesorio": "gafas",
+      "para": "decisiones y revisiones difíciles",
+      "velocidad": 0.7,
+      "frase": "Primero, entendamos el problema."
+    },
+    {
+      "agente": "claude",
+      "patrones": [
+        "claude-sonnet-*",
+        "sonnet"
+      ],
+      "personalidad": "El artesano",
+      "ropa": "chaleco",
+      "color": "#9b745f",
+      "accesorio": "pluma",
+      "para": "código diario y acabados",
+      "velocidad": 1,
+      "frase": "Una pieza bien hecha cada vez."
+    },
+    {
+      "agente": "claude",
+      "patrones": [
+        "claude-haiku-*",
+        "haiku"
+      ],
+      "personalidad": "El veloz",
+      "ropa": "sudadera",
+      "color": "#d27e67",
+      "accesorio": "capucha",
+      "para": "tareas mecánicas y respuestas rápidas",
+      "velocidad": 1.5,
+      "frase": "¡Siguiente tarea!"
+    },
+    {
+      "agente": "claude",
+      "patrones": [
+        "claude-fable-*",
+        "fable"
+      ],
+      "personalidad": "El narrador",
+      "ropa": "capa",
+      "color": "#8e72ac",
+      "accesorio": "pluma",
+      "para": "síntesis, historias y comunicación",
+      "velocidad": 0.85,
+      "frase": "Cada proyecto tiene una historia."
+    },
+    {
+      "agente": "codex",
+      "patrones": [
+        "gpt-6.1-sol*"
+      ],
+      "personalidad": "El todoterreno",
+      "ropa": "mono",
+      "color": "#5a9ca5",
+      "accesorio": "bolsillos",
+      "para": "construcción y mantenimiento de principio a fin",
+      "velocidad": 1,
+      "frase": "Vamos a dejarlo funcionando."
+    },
+    {
+      "agente": "codex",
+      "patrones": [
+        "gpt-6-astra*"
+      ],
+      "personalidad": "El ingeniero",
+      "ropa": "tecnica",
+      "color": "#3d657d",
+      "accesorio": "esfuerzo",
+      "para": "arquitectura y problemas complejos",
+      "velocidad": 1,
+      "frase": "Hay una solución elegante."
+    },
+    {
+      "agente": "codex",
+      "patrones": [
+        "gpt-6-sol*"
+      ],
+      "personalidad": "El todoterreno anterior",
+      "ropa": "mono-gastado",
+      "color": "#69807c",
+      "accesorio": "remiendo",
+      "para": "código y mantenimiento conocido",
+      "velocidad": 0.9,
+      "frase": "Este mono aún tiene trabajo."
+    },
+    {
+      "agente": "codex",
+      "patrones": [
+        "gpt-6-luna*"
+      ],
+      "personalidad": "El ágil",
+      "ropa": "ligera",
+      "color": "#86bdaf",
+      "accesorio": "zapatillas",
+      "para": "cambios pequeños y tareas rápidas",
+      "velocidad": 1.4,
+      "frase": "Ligero de equipaje."
+    },
+    {
+      "agente": "codex",
+      "patrones": [
+        "gpt-5.6-sol*"
+      ],
+      "personalidad": "El veterano Sol",
+      "ropa": "clasica",
+      "color": "#9b8d70",
+      "accesorio": "canas",
+      "para": "mantenimiento y trabajo general",
+      "velocidad": 0.8,
+      "frase": "La experiencia cuenta."
+    },
+    {
+      "agente": "codex",
+      "patrones": [
+        "gpt-5.6-terra*"
+      ],
+      "personalidad": "El veterano Terra",
+      "ropa": "clasica",
+      "color": "#92746d",
+      "accesorio": "canas",
+      "para": "análisis y proyectos existentes",
+      "velocidad": 0.75,
+      "frase": "Revisemos los cimientos."
+    },
+    {
+      "agente": "codex",
+      "patrones": [
+        "gpt-5.6-luna*"
+      ],
+      "personalidad": "El veterano Luna",
+      "ropa": "clasica",
+      "color": "#8b94ad",
+      "accesorio": "canas",
+      "para": "tareas breves y conocidas",
+      "velocidad": 1,
+      "frase": "Lo sencillo también merece cuidado."
+    },
+    {
+      "agente": "agy",
+      "patrones": [
+        "gemini-*-flash*"
+      ],
+      "personalidad": "El incansable",
+      "ropa": "deportiva",
+      "color": "#6ab7a1",
+      "accesorio": "zapatillas",
+      "para": "volumen, documentación y auditoría",
+      "velocidad": 1.8,
+      "frase": "¡Todavía queda energía!"
+    },
+    {
+      "agente": "agy",
+      "patrones": [
+        "gemini-4-argon*"
+      ],
+      "personalidad": "El genio",
+      "ropa": "bata",
+      "color": "#dce4df",
+      "accesorio": "gafas",
+      "para": "razonamiento difícil en tareas acotadas",
+      "velocidad": 0.8,
+      "frase": "Una idea más… y un café."
+    },
+    {
+      "agente": "agy",
+      "patrones": [
+        "claude-*",
+        "gpt-oss*"
+      ],
+      "personalidad": "El invitado",
+      "ropa": "prestado",
+      "color": "#8c7aaf",
+      "accesorio": "corbata",
+      "para": "apoyo especializado con cuota compartida",
+      "velocidad": 0.9,
+      "frase": "Gracias por guardar mi sitio."
+    }
+  ]
+}

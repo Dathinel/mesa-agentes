@@ -1,0 +1,18 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pruebas:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pruebas de caos y de la mesa (copias aisladas, agentes simulados)
+        shell: cmd
+        env:
+          MESA_SIN_PAUSA: '1'
+        run: Probar.bat
