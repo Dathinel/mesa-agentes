@@ -1030,3 +1030,8 @@ button {
 }
 
 [hidden] { display: none !important; }
+
+/* En vivo: encargo en curso, dónde corre y la salida reciente del agente. */
+.ejecucion-viva { margin-top: 0.6rem; font-size: 14px; }
+.ejecucion-cabecera { font-weight: 600; margin-bottom: 0.3rem; overflow-wrap: anywhere; }
+.ejecucion-salida { max-height: 9rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 0.5rem; border-radius: 6px; background: rgba(0, 0, 0, 0.25); font: 14px/1.4 Consolas, monospace; color: inherit; }

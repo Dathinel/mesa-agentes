@@ -388,6 +388,27 @@
       campoMotivo.appendChild(textoMotivo);
       cuerpo.appendChild(campoMotivo);
 
+      // En vivo: el encargo en curso, dónde corre y lo último que va diciendo el agente.
+      if (agente.ejecucion) {
+        const vivo = document.createElement('div');
+        vivo.className = 'ejecucion-viva';
+        const cabecera = document.createElement('div');
+        cabecera.className = 'ejecucion-cabecera';
+        cabecera.textContent = `Encargo #${agente.ejecucion.n} en ${agente.ejecucion.hilo} · corre en ${agente.ejecucion.corre_en}`;
+        const salida = document.createElement('pre');
+        salida.className = 'ejecucion-salida';
+        salida.textContent = agente.ejecucion.salida || '(todavía sin salida)';
+        vivo.appendChild(cabecera);
+        vivo.appendChild(salida);
+        cuerpo.appendChild(vivo);
+      } else if (agente.resultado) {
+        const ultimo = document.createElement('div');
+        ultimo.className = 'ejecucion-viva';
+        const fin = new Date(agente.resultado.fin);
+        ultimo.textContent = `Último encargo: #${agente.resultado.n} en ${agente.resultado.hilo}, ${agente.resultado.estado === 'hecho' ? 'hecho' : 'sin éxito'} ${tiempoRelativo(fin)}`;
+        cuerpo.appendChild(ultimo);
+      }
+
       // Alerta visible si la tiene
       if (agente.alerta) {
         const alertaDiv = document.createElement('div');
