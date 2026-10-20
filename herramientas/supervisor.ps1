@@ -64,11 +64,11 @@ function Contrato-Estado($a, $e, $escalado, $ultimo, [datetime]$ahora, $previo) 
   $c = [ordered]@{ agente = $a; estado = 'libre'; motivo = 'listo para encargos'; desde = $null; hasta = $e.hasta; hilo = $e.hilo; n = $e.n; latido = $e.latido; alerta = $null; actualizado = (Mesa-IsoNow) }
   if ($e.motivo) { $c.motivo = $e.motivo }
   if ($e.estado -eq 'caido' -or $e.estado -eq 'apagado') { $c.estado = $e.estado }
+  elseif ($e.estado -eq 'sin-cuota') { $c.estado = 'sin-cuota' }
   elseif ($escalado -or $e.estado -eq 'necesita-login') {
     $c.estado = 'esperando-daniel'
     $c.motivo = if ($escalado) { "encargo #$($escalado.n) escalado: lo revisa Daniel" } else { 'la sesión del CLI caducó: inicia sesión en su consola' }
   }
-  elseif ($e.estado -eq 'sin-cuota') { $c.estado = 'sin-cuota' }
   elseif ($e.estado -in @('trabajando', 'colgado')) { $c.estado = 'trabajando' }
   if ($e.estado -eq 'colgado') { $c.alerta = [ordered]@{ tipo = 'colgado'; texto = $e.motivo } }
   if ($c.estado -eq 'libre' -and $ultimo -and $ultimo.m.estado -in @('huerfano', 'fallo') -and $ultimo.fin -gt $ahora.AddHours(-24)) {

@@ -88,7 +88,7 @@ try {
   $log7 = Join-Path $raiz 'colgado.log'; [IO.File]::WriteAllText($log7, 'sin novedades'); (Get-Item $log7).LastWriteTime = (Get-Date).AddMinutes(-45)
   Poner $hilo $n7 { param($m) $m.estado = 'ejecutando'; $m.llamada = [pscustomobject]@{ inicio = (Get-Date).AddMinutes(-50).ToString('yyyy-MM-ddTHH:mm:sszzz'); fin = $null; salida = $null; log = $log7; pid = $PID } }
   Supervisar
-  Caso 'Encargo colgado' 'claude colgado, encargo sigue en curso' "estado=$((Agente claude).estado), encargo=$((Msg $hilo $n7).estado)" ((Agente claude).estado -eq 'colgado' -and (Msg $hilo $n7).estado -eq 'ejecutando')
+  Caso 'Encargo colgado' 'claude trabajando con alerta colgado, encargo sigue en curso' "estado=$((Agente claude).estado), alerta=$((Agente claude).alerta.tipo), encargo=$((Msg $hilo $n7).estado)" ((Agente claude).estado -eq 'trabajando' -and (Agente claude).alerta.tipo -eq 'colgado' -and (Msg $hilo $n7).estado -eq 'ejecutando')
 
   # 8. Reclamo cuyo agente no da señales: arriendo caducado, se avisa al líder sin soltarlo solo.
   $rec = [ordered]@{ tarea = 'caos-b'; agente = 'agy'; fecha = (Get-Date).AddHours(-3).ToString('yyyy-MM-ddTHH:mm:sszzz'); hilo = $hilo; toca = 'x' }

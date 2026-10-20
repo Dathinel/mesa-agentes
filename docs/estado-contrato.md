@@ -14,7 +14,7 @@ Quién lo lee: la vista Resumen y la oficina (`panel\`), el tablero (`herramient
 | `caido` | Debería estar activo y no responde | Panel sin latido, o en Claude, no hay proceso `claude` |
 | `apagado` | Cerrado a propósito | El panel salió limpio (marca `trabajador-<agente>.cerrado`) |
 
-Prioridad si varias condiciones se cumplen: `caido` > `esperando-daniel` > `sin-cuota` > `trabajando` > `libre`. `apagado` solo aplica si no hay proceso ni latido y existe la marca de cierre.
+Prioridad si varias condiciones se cumplen: `caido` > `sin-cuota` > `esperando-daniel` > `trabajando` > `libre`. La causa más reciente del agente manda: una cuota agotada gana a un encargo escalado anterior. `apagado` solo aplica si no hay proceso ni latido y existe la marca de cierre.
 
 ## Campos del objeto
 
