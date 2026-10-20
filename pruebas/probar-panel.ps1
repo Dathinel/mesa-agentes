@@ -128,7 +128,7 @@ try {
   $r304 = Enviar-Http $puertoLibre 'GET' '/api/estado' @{ 'X-Mesa-Token' = $token; 'Origin' = "http://127.0.0.1:$puertoLibre"; 'If-None-Match' = $etag }
   Caso 'segunda peticion con If-None-Match' '304' "$($r304.Status) (cuerpo=$($r304.Body.Length) bytes)" ($r304.Status -eq 304 -and $r304.Body.Length -eq 0)
 
-  # 5. Tamano del resumen con datos reales < 64 KB (subido de 60: el contrato de estado añade ~0,4 KB por agente)
+  # 5. Tamano del resumen con datos reales < 60 KB
   $bytesReal = & {
     $env:MESA_RAIZ_PRUEBA = $null
     . "$h\comun.ps1"
@@ -138,7 +138,7 @@ try {
   }
   $env:MESA_RAIZ_PRUEBA = $raiz
   $kbReal = [math]::Round($bytesReal / 1KB, 2)
-  Caso 'tamano del resumen con los datos reales < 64 KB' '< 64 KB' "$kbReal KB ($bytesReal bytes)" ($bytesReal -lt 64KB)
+  Caso 'tamano del resumen con los datos reales < 60 KB' '< 60 KB' "$kbReal KB ($bytesReal bytes)" ($bytesReal -lt 60KB)
 
   # 6. /api/hilo?id= con id que intente salir de la carpeta (..) -> 400
   $rTraversal1 = Enviar-Http $puertoLibre 'GET' '/api/hilo?id=..\escape' @{ 'X-Mesa-Token' = $token; 'Origin' = "http://127.0.0.1:$puertoLibre" }

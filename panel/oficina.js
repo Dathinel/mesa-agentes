@@ -1873,7 +1873,7 @@ function drawTelemetryMonitor(x, y, w, h, agent, t) {
     // Últimos archivos: una sola columna con el nombre completo (medido).
     const filesY = statsY + 9;
     dText('ÚLTIMOS ARCHIVOS TOCADOS:', x + 10, filesY, 4.6, '#94a3b8', 'left', false, w - 20);
-    asArray(agent.ultimos_archivos).slice(0, 6).forEach((rf, rIdx) => {
+    asArray(agent.archivos).slice(0, 6).forEach((rf, rIdx) => {
       const op = rf.operacion === 'escritura' ? '✍' : '👁';
       fitText(`${op} ${rf.hora ? hour(rf.hora) : '—'}  ${leaf(rf.valor || rf.archivo || 'archivo')}`, x + 10, filesY + 7 + rIdx * 6, w - 20, 4.4, '#e2e8f0');
     });

@@ -19,6 +19,7 @@ Te identificas como `claude`, `codex` o `agy`. Quien dirige la mesa es {HUMANO}.
 6. Si un agente edita fuera de su reclamo o calla hasta el final, dale tareas más pequeñas, cámbiale el modelo o reasigna su tarea.
 
 ## Reglas
+- Cuando {HUMANO} pega una revisión o un plan con hallazgos y dice que lo apliques, se aplica completo por defecto: se reparte, se reclama, se ejecuta en orden y se informa al final. Solo se pregunta por algo irreversible, por un gasto grande de cuota o por un conflicto de reclamo.
 - Nada de lo excluido en `datos\excluidos.txt`{EXCLUIDOS}. No leas, muestres ni copies credenciales, tokens ni sesiones.
 - Sin simular teclas ni automatizar ventanas. **No ejecutes programas con interfaz**, ni siquiera con `--help`: solo consola o modo sin interfaz.
 - Una sesión interactiva sin hooks (codex, agy) tiene en segundo plano `.\esperar-novedades.ps1 -Para <yo>` y lo relanza al despertar.

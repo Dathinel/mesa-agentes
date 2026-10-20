@@ -767,9 +767,7 @@ function Obtener-EstadoCompleto {
         if ($fin.Count) { [ordered]@{ hilo=$fin[0].hilo; n=$fin[0].n; estado=$fin[0].estado; fin=$fin[0].llamada.fin } } else { $null })
       ultima=$ultima; pasantes=[Math]::Min(4,$pasantes); pasantes_lista=$listaPasantes; hilo_actual=$hiloActual; vuelve=$vuelve
       archivos=$ultimos6
-      ultimos_archivos=$ultimos6
       tiempo_trabajado_hoy=$tiempoHoy
-      calibracion_mensaje=$calibracionTexto
       tokens_por_hora=$tokensPorHora
       poster=$poster
       estadisticas=@{
