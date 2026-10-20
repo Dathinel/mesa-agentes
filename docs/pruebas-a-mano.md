@@ -2,9 +2,9 @@
 
 Lo automático pasa (`Probar.bat`). Esto necesita tus ojos y tu ventana:
 
-1. **Abrir.** Cierra las ventanas de la mesa y ejecuta `Cuadrilla.bat`. Esperado: una sola ventana de Windows Terminal con Claude a la izquierda y Codex, agy y el tablero a la derecha; Claude retoma tu última conversación. Con `Cuadrilla.bat nuevo`, conversación nueva.
-2. **Tablero.** Que se lea bien de un vistazo a tu tamaño de ventana: una línea por agente, sin parpadeo molesto cada 5 s.
-3. **Panel caído.** Cierra el panel de agy con la X. En menos de 2 min te llega una notificación de Windows «Mesa · el panel de agy se cayó…». `Cuadrilla.bat panel agy` lo reabre en la misma ventana.
-4. **Título del panel.** Mientras codex trabaja, su panel se titula «codex · trabajando #N»; al acabar, «codex · esperando».
-5. **Cerrar.** `Cuadrilla.bat cerrar` para el supervisor y la oficina; al volver a abrir, los hilos siguen donde estaban.
-6. **Oficina.** La oficina en el navegador sigue igual de fluida tras aligerar `estado-panel.json`.
+1. **Abrir.** Cierra las ventanas de la mesa y ejecuta `Cuadrilla.bat`. Esperado: una sola ventana de Windows Terminal con Claude a la izquierda y Codex, agy y el tablero a la derecha; Claude retoma la conversación de la mesa (`datos\sesion-claude.txt`) y nada más empezar te muestra «[Mesa] Eres claude… Tus reclamos…». En el tablero, «Supervisor: vivo». Con `Cuadrilla.bat nuevo`, conversación nueva.
+2. **Cerrar una pestaña.** Cierra el panel de agy con la X. En menos de 2 min: notificación de Windows «Cuadrilla · el panel de agy se cayó…», agy en rojo en el tablero y una línea en `mesa.ps1 bitacora`. `Cuadrilla.bat panel agy` lo reabre en la misma ventana y el tablero vuelve a «libre».
+3. **Suspender el PC y volver.** Suspende con la mesa abierta, espera unos minutos y vuelve. Esperado: **ninguna** notificación de caída al despertar; en la bitácora, «Vuelta tras un salto de N min… no aviso de caídas». Si algo sigue caído de verdad, avisa en la vuelta siguiente (30 s después).
+4. **Aprobar un encargo desde la cola.** Pídele a Claude que delegue algo que escriba fuera de la mesa (por ejemplo, en un repositorio). Esperado: el encargo sale en «Esperan a <tu nombre>» del tablero con su tipo (`repo`). Apruébalo con `.\mesa.ps1 aprobar -Hilo <id> -N <n>` (o recházalo con `rechazar -Motivo`); al aprobarlo, el panel del agente lo ejecuta a la vista.
+5. **Parar el supervisor.** `Cuadrilla.bat cerrar` dejando abiertos los paneles: a los 3 min cada panel avisa en rojo de que el supervisor no da señales y el tablero lo marca PARADO.
+6. **Oficina.** Se abre sola en el navegador y se ve como siempre; abrir un hilo carga sus mensajes al momento.
