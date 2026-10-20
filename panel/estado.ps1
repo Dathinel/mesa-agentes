@@ -438,7 +438,7 @@ function Obtener-EstadoCompleto {
     if ((Mesa-NormalizarHerramienta $m.autor) -eq 'claude' -and $m.tipo -eq 'encargo' -and (Mesa-NormalizarHerramienta $m.para) -ne 'claude' -and $m.estado -in @('hecho','fallo')) { [pscustomobject]@{ dia=(Estado-Local $m.fecha).Date; ok=($m.estado -eq 'hecho') } }
   } })
   $procs=@()
-  try { $procs=@(Get-CimInstance Win32_Process -Property Name,ProcessId,ParentProcessId -ErrorAction Stop) } catch {
+  try { $procs=@(Get-CimInstance Win32_Process -Property Name,ProcessId,ParentProcessId,CommandLine -ErrorAction Stop) } catch {
     $procs=@(Get-Process -Name claude,codex,agy -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ Name=($_.ProcessName+'.exe'); ProcessId=$_.Id; ParentProcessId=0 } })
   }
 
@@ -453,7 +453,8 @@ function Obtener-EstadoCompleto {
   $agentes=@()
   foreach ($id in @('claude','codex','agy')) {
     $modelo=$null; $esfuerzo=$null; $ultima=$null; $pasantes=0; $estado='apagado'; $origen='configuración'
-    $vivos=@($procs | Where-Object { $_.Name -eq "$id.exe" })
+    # codex corre como node.exe con su script; claude en mayúsculas es la app de escritorio, no la CLI.
+    $vivos=@($procs | Where-Object { if ($id -eq 'codex') { $_.Name -eq 'codex.exe' -or ($_.Name -eq 'node.exe' -and "$($_.CommandLine)" -match '@openai[\\/]codex') } else { $_.Name -ceq "$id.exe" } })
     if ($vivos.Count) { $estado='esperando' }
     # Sesión principal: el modelo y la última acción salen de ella, nunca de un subagente.
     $f=@(switch ($id) {

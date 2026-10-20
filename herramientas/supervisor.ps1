@@ -189,7 +189,7 @@ function Vuelta {
       if ($estado[$a].estado -eq 'libre') { $estado[$a].estado = 'apagado'; $estado[$a].motivo = 'panel cerrado' }
       continue
     }
-    $panelCaido =if ($a -eq 'claude') { -not (Get-Process -Name claude -ErrorAction SilentlyContinue) }
+    $panelCaido =if ($a -eq 'claude') { -not (Get-Process -Name claude -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -ceq 'claude' }) }
                   else { (Test-Path -LiteralPath $latFile) -and ($ahora - (Get-Item -LiteralPath $latFile).LastWriteTime).TotalSeconds -gt $latidoSeg }
     if ($panelCaido -and $estado[$a].estado -eq 'libre' -and -not $script:tolerante) {
       $estado[$a].estado = 'caido'; $estado[$a].motivo = if ($a -eq 'claude') { 'no hay ningún proceso de claude' } else { 'su panel no da latido' }
