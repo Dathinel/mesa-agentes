@@ -1,6 +1,6 @@
 ﻿# Supervisor de la Mesa, sin modelo: cada -Intervalo segundos mira si algún agente murió, se colgó o se quedó sin cuota,
 # deja su estado en datos\agentes\<agente>.json, avisa al líder en el hilo y a la persona con una notificación de Windows,
-# y anota todo en la bitácora del día (datos\bitacora\AAAA-MM-DD.md). No reinicia nada salvo que mesa.json lo active.
+# y anota todo en la bitácora del día (datos\bitacora\AAAA-MM-DD.md). Si cambian sus scripts, se reinicia y reinicia la oficina.
 # Uso: supervisor.ps1 [-Intervalo 30] [-UnaVez] [-SinAvisos]
 param(
   [int]$Intervalo = 30,
@@ -59,9 +59,67 @@ function Informar($clave, $memoria, $hilo, $para, $paso, $hice, $necesito) {
 
 function Vivo($id) { $id -and (Get-Process -Id $id -ErrorAction SilentlyContinue) }
 
+# Huella de los scripts: si cambia, este supervisor se reinicia y la oficina se vuelve a abrir con el código nuevo.
+function Huella-Codigo {
+  $archivos = @(Get-ChildItem -Path (Join-Path $Global:Mesa_Base 'herramientas\*.ps1'), (Join-Path $Global:Mesa_Base 'panel\*.ps1') -File -ErrorAction SilentlyContinue | Sort-Object FullName)
+  ($archivos | ForEach-Object { '{0}={1}' -f $_.Name, (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }) -join ';'
+}
+
+# Identidad de un proceso: PID, hora de inicio y línea de comandos (el mismo criterio que Mesa-ProcesoVivo).
+function Proceso-Identidad($p) {
+  $linea = "$($p.CommandLine)"
+  [ordered]@{ pid = [int]$p.ProcessId; nombre = $p.Name; inicio = $p.CreationDate.ToString('o'); linea = $linea.Substring(0, [Math]::Min(160, $linea.Length)) }
+}
+
+# Panel de codex o agy: su trabajador.ps1 con -Agente, o nada si no está abierto.
+function Proceso-Panel($a) {
+  $p = Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -match "trabajador\.ps1.* -Agente $a(\s|$)" } | Select-Object -First 1
+  if ($p) { Proceso-Identidad $p }
+}
+
+# Cortes a propósito (mesa.ps1 cortar): un marcador por encargo, para que no cuenten como fallo.
+function Corte-De($hilo, $n, $intento) {
+  $c = Mesa-LeerJson (Join-Path $Global:Mesa_Raiz "cortes\$hilo-$n.json")
+  if ($c -and "$($c.intento)" -eq "$intento") { $c }
+}
+
+# Solo reinicia la oficina de esta copia de la mesa (la ruta de servidor.ps1 es la de Mesa_Base).
+function Reiniciar-Servidor {
+  $ruta = [regex]::Escape((Join-Path $Global:Mesa_Base 'panel\servidor.ps1'))
+  foreach ($p in @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -match $ruta })) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
+  if ($env:MESA_RAIZ_PRUEBA) { return }
+  Start-Process powershell -WindowStyle Hidden -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$(Join-Path $Global:Mesa_Base 'panel\servidor.ps1')`""
+}
+
+# Un script a medio guardar no se carga: si algún .ps1 tiene errores de sintaxis, se sigue con la versión que corre.
+function Codigo-Valido {
+  foreach ($f in @(Get-ChildItem -Path (Join-Path $Global:Mesa_Base 'herramientas\*.ps1'), (Join-Path $Global:Mesa_Base 'panel\*.ps1') -File -ErrorAction SilentlyContinue)) {
+    $errores = $null
+    [void][Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$errores)
+    if ($errores) { return $false }
+  }
+  $true
+}
+
+# Recarga: el código cambió. Reinicia la oficina, espera a que responda y relanza este supervisor con el código nuevo.
+function Recargar {
+  Bitacora 'Cambió el código de la mesa: reinicio la oficina y el supervisor para que corran con la versión nueva.'
+  Reiniciar-Servidor
+  if (-not $env:MESA_RAIZ_PRUEBA) {
+    $pf = Join-Path $Global:Mesa_Raiz 'puerto.txt'
+    $puerto = if (Test-Path -LiteralPath $pf) { (Get-Content -LiteralPath $pf -Raw).Trim() } else { '8790' }
+    for ($i = 0; $i -lt 20; $i++) { try { if ((Invoke-WebRequest "http://127.0.0.1:$puerto/api/ping" -UseBasicParsing -TimeoutSec 2).Content -match '"ok"') { break } } catch {}; Start-Sleep -Seconds 1 }
+  }
+  $unico.Dispose()
+  $parametros = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-Intervalo', $Intervalo)
+  if ($SinAvisos) { $parametros += '-SinAvisos' }
+  Start-Process powershell -WindowStyle Hidden -ArgumentList $parametros
+  exit 0
+}
+
 # Traduce el estado interno de la vuelta a los seis del contrato (docs\estado-contrato.md).
 function Contrato-Estado($a, $e, $escalado, $ultimo, [datetime]$ahora, $previo) {
-  $c = [ordered]@{ agente = $a; estado = 'libre'; motivo = 'listo para encargos'; desde = $null; hasta = $e.hasta; hilo = $e.hilo; n = $e.n; latido = $e.latido; alerta = $null; actualizado = (Mesa-IsoNow) }
+  $c = [ordered]@{ agente = $a; estado = 'libre'; motivo = 'listo para encargos'; desde = $null; hasta = $e.hasta; hilo = $e.hilo; n = $e.n; latido = $e.latido; alerta = $null; actualizado = (Mesa-IsoNow); panel = $e.panel; proceso = $e.proceso }
   if ($e.motivo) { $c.motivo = $e.motivo }
   if ($e.estado -eq 'caido' -or $e.estado -eq 'apagado') { $c.estado = $e.estado }
   elseif ($e.estado -eq 'sin-cuota') { $c.estado = 'sin-cuota' }
@@ -73,7 +131,8 @@ function Contrato-Estado($a, $e, $escalado, $ultimo, [datetime]$ahora, $previo) 
   if ($e.estado -eq 'colgado') { $c.alerta = [ordered]@{ tipo = 'colgado'; texto = $e.motivo } }
   if ($c.estado -eq 'libre' -and $ultimo -and $ultimo.m.estado -in @('huerfano', 'fallo') -and $ultimo.fin -gt $ahora.AddHours(-24)) {
     $huerfano = $ultimo.m.estado -eq 'huerfano'
-    $c.alerta = [ordered]@{ tipo = if ($huerfano) { 'huerfano' } else { 'fallido' }; texto = "encargo #$($ultimo.m.n) de $($ultimo.hilo): $(if ($huerfano) { 'su proceso ya no existe' } else { 'terminó sin éxito (fallo o corte)' }). Relánzalo con mesa.ps1 reintentar" }
+    if ($ultimo.cortado) { $c.alerta = [ordered]@{ tipo = 'cortado'; texto = "encargo #$($ultimo.m.n) de $($ultimo.hilo): cortado por $($ultimo.cortado.por) a las $(([datetime]$ultimo.cortado.hora).ToString('HH:mm')). Fue a propósito, no es un fallo" } }
+    else { $c.alerta = [ordered]@{ tipo = if ($huerfano) { 'huerfano' } else { 'fallido' }; texto = "encargo #$($ultimo.m.n) de $($ultimo.hilo): $(if ($huerfano) { 'su proceso ya no existe' } else { 'terminó con fallo' }). Relánzalo con mesa.ps1 reintentar" } }
   }
   $c.desde = if ($previo -and $previo.estado -eq $c.estado -and $previo.desde) { $previo.desde } else { Mesa-IsoNow }
   $c
@@ -114,7 +173,7 @@ function Vuelta {
   if (-not $memoria) { $memoria = [pscustomobject]@{ avisados = [pscustomobject]@{}; relanzados = [pscustomobject]@{} } }
   $ahora = Get-Date
   $estado = @{}
-  foreach ($a in $Global:Mesa_Agentes) { $estado[$a] = [ordered]@{ agente = $a; estado = 'libre'; motivo = ''; hilo = $null; n = $null; latido = $null; actualizado = (Mesa-IsoNow); hasta = $null } }
+  foreach ($a in $Global:Mesa_Agentes) { $estado[$a] = [ordered]@{ agente = $a; estado = 'libre'; motivo = ''; hilo = $null; n = $null; latido = $null; actualizado = (Mesa-IsoNow); hasta = $null; panel = $null; proceso = $null } }
 
   try { Invocar-Vigia } catch { Mesa-AnexarLinea (Join-Path $Global:Mesa_Raiz 'errores-paneles.log') ("{0}`tvigia`t{1}" -f (Mesa-IsoNow), $_.Exception.Message) }
 
@@ -160,7 +219,7 @@ function Vuelta {
         }
       } elseif ($m.llamada.fin -and ($m.tipo -eq 'encargo')) {
         $fin = [datetime]::Parse($m.llamada.fin)
-        if (-not $ultimoFin[$a] -or $fin -gt $ultimoFin[$a].fin) { $ultimoFin[$a] = @{ fin = $fin; m = $m; hilo = $d.Name; lider = $lider } }
+        if (-not $ultimoFin[$a] -or $fin -gt $ultimoFin[$a].fin) { $ultimoFin[$a] = @{ fin = $fin; m = $m; hilo = $d.Name; lider = $lider; cortado = (Corte-De $d.Name $m.n $m.llamada.intento) } }
       }
     }
   }
@@ -179,20 +238,28 @@ function Vuelta {
 
   # 2. Señales de vida: paneles de codex y agy por su latido; claude interactivo por su proceso.
   foreach ($a in $Global:Mesa_Agentes) {
+    # Claude no tiene panel: su señal es la sesión de la CLI abierta. La app de escritorio no cuenta (nombre en mayúsculas).
+    if ($a -eq 'claude') {
+      $cli = Get-CimInstance Win32_Process | Where-Object { $_.Name -ceq 'claude.exe' } | Select-Object -First 1
+      if ($cli) { $estado[$a].proceso = Proceso-Identidad $cli; if ($estado[$a].estado -eq 'libre') { $estado[$a].motivo = 'sesión de claude abierta' } }
+      elseif ($estado[$a].estado -eq 'libre') { $estado[$a].estado = 'apagado'; $estado[$a].motivo = 'no hay sesión de claude abierta' }
+      continue
+    }
     $ult = Mesa-UltimaActividad $a
     $latFile = Join-Path $Global:Mesa_Raiz "trabajador-$a.latido"
     if (Test-Path -LiteralPath $latFile) { $lt = (Get-Item -LiteralPath $latFile).LastWriteTime; if ($lt -gt $ult) { $ult = $lt } }
     if ($ult -gt [datetime]::MinValue) { $estado[$a].latido = $ult.ToString('yyyy-MM-ddTHH:mm:sszzz') }
+    $estado[$a].panel = Proceso-Panel $a
     # El panel salió limpio (trabajador.ps1 deja la marca al cerrar): no es una caída.
     $marca = Join-Path $Global:Mesa_Raiz "trabajador-$a.cerrado"
     if ((Test-Path -LiteralPath $marca) -and (-not (Test-Path -LiteralPath $latFile) -or (Get-Item -LiteralPath $marca).LastWriteTime -gt (Get-Item -LiteralPath $latFile).LastWriteTime)) {
       if ($estado[$a].estado -eq 'libre') { $estado[$a].estado = 'apagado'; $estado[$a].motivo = 'panel cerrado' }
       continue
     }
-    $panelCaido =if ($a -eq 'claude') { -not (Get-Process -Name claude -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -ceq 'claude' }) }
-                  else { (Test-Path -LiteralPath $latFile) -and ($ahora - (Get-Item -LiteralPath $latFile).LastWriteTime).TotalSeconds -gt $latidoSeg }
+    $panelCaido = (Test-Path -LiteralPath $latFile) -and ($ahora - (Get-Item -LiteralPath $latFile).LastWriteTime).TotalSeconds -gt $latidoSeg
     if ($panelCaido -and $estado[$a].estado -eq 'libre' -and -not $script:tolerante) {
-      $estado[$a].estado = 'caido'; $estado[$a].motivo = if ($a -eq 'claude') { 'no hay ningún proceso de claude' } else { 'su panel no da latido' }
+      # Con proceso vivo el panel está colgado, no cerrado: se distingue en el motivo.
+      $estado[$a].estado = 'caido'; $estado[$a].motivo = if ($estado[$a].panel) { "el panel sigue abierto (pid $($estado[$a].panel.pid)) pero no da latido" } else { 'el panel no está abierto y no dejó su marca de cierre' }
       $memoria.avisados.PSObject.Properties.Remove("vivo-$a")
       $relanzado = $false
       if ($relanzar -and $a -ne 'claude') {
@@ -249,8 +316,16 @@ function Vuelta {
   Rotar 'errores-paneles.log' 1
 }
 
+$huellaInicial = Huella-Codigo
+$huellaRota = $null
 try {
   while ($true) {
+    # Un archivo a medio guardar no tumba el bucle: la huella se vuelve a mirar en la vuelta siguiente.
+    $huellaAhora = try { Huella-Codigo } catch { $huellaInicial }
+    if (-not $UnaVez -and $huellaAhora -ne $huellaInicial) {
+      if (Codigo-Valido) { Recargar }
+      elseif ($huellaAhora -ne $huellaRota) { $huellaRota = $huellaAhora; Bitacora 'Cambió un script de la mesa, pero tiene errores de sintaxis: sigo con la versión que corre hasta que se corrija.' }
+    }
     try { Vuelta } catch { try { Mesa-AnexarLinea (Join-Path $Global:Mesa_Raiz 'errores-paneles.log') ("{0}`tsupervisor`t{1}" -f (Mesa-IsoNow), $_.Exception.Message) } catch {}; if ($UnaVez) { throw } }
     if ($UnaVez) { break }
     Start-Sleep -Seconds $Intervalo
