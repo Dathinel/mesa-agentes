@@ -40,6 +40,23 @@ $agy = Estado 'agy'
 Comprobar 'agy con encargo fallido es libre con alerta fallido' ($agy.estado -eq 'libre' -and $agy.alerta.tipo -eq 'fallido')
 Comprobar 'el encargo escalado lleva a esperando-daniel con su número' ($codex.motivo -match '#1 escalado')
 
+# Hilo con hilo.json dañado: aparece como dañado y conserva su mensaje pendiente.
+$danado = Join-Path $raiz 'hilos\prueba-danado'
+New-Item -ItemType Directory -Force $danado | Out-Null
+[IO.File]::WriteAllText((Join-Path $danado 'hilo.json'), '{ roto')
+$pend = @{ tipo = 'mensaje'; n = 1; de = 'codex'; para = 'claude'; autor = 'codex'; estado = 'pendiente'; fecha = (Get-Date).ToString('o'); texto = 'pendiente de hilo dañado' }
+[IO.File]::WriteAllText((Join-Path $danado '0001-codex.json'), ($pend | ConvertTo-Json))
+$pendientes = & {
+  $env:MESA_RAIZ_PRUEBA = $raiz
+  . (Join-Path $PSScriptRoot '..\herramientas\comun.ps1')
+  . (Join-Path $PSScriptRoot '..\panel\estado.ps1')
+  $e = Obtener-EstadoCompleto
+  $e.hilos | Where-Object { $_.id -eq 'prueba-danado' } | ForEach-Object { $_.estado }
+  $e.pendientes | Where-Object { $_.texto -eq 'pendiente de hilo dañado' } | ForEach-Object { $_.texto }
+}
+Comprobar 'hilo con hilo.json dañado aparece como dañado' ($pendientes -contains 'dañado')
+Comprobar 'su mensaje pendiente se conserva' ($pendientes -contains 'pendiente de hilo dañado')
+
 Remove-Item -LiteralPath $raiz -Recurse -Force -ErrorAction SilentlyContinue
 "Fallos: $fallos"
 if ($fallos) { exit 1 }

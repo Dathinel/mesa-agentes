@@ -409,8 +409,9 @@ function Obtener-EstadoCompleto {
   $cuota=Mesa-LeerJson $Global:Mesa_CuotaEstado
   $hilos=@(); $pendientes=@(); $tareas=@{}
   foreach ($dir in @(Get-ChildItem -LiteralPath $Global:Mesa_Hilos -Directory -ErrorAction SilentlyContinue)) {
-    $h=Mesa-LeerJson (Join-Path $dir.FullName 'hilo.json')
-    if (!$h) { continue }
+    $h=try { Mesa-LeerJson (Join-Path $dir.FullName 'hilo.json') } catch { $null }
+    # Un hilo.json dañado no esconde el hilo ni sus pendientes: se muestra como dañado.
+    if (!$h) { $h=[pscustomobject]@{ id=$dir.Name; titulo='Hilo dañado: hilo.json no se puede leer'; lider=$null; participantes=@(); estado='dañado'; actualizado=(Mesa-IsoNow) } }
     $mensajes=@()
     foreach ($f in @(Get-ChildItem -LiteralPath $dir.FullName -Filter '*-*.json' | Sort-Object Name)) {
       try {
