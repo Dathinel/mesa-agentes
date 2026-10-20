@@ -75,7 +75,7 @@ namespace Mesa {
       log = new StreamWriter(archivoLog, false, new UTF8Encoding(false)); log.AutoFlush = true;
       job = CreateJobObject(IntPtr.Zero, null);
       if (job == IntPtr.Zero) throw new Win32Exception();
-      var limites = new LimitesExtendidos(); limites.Basicos.Banderas = 0x2000; // KILL_ON_JOB_CLOSE conserva el árbol aunque muera su raíz.
+      var limites = new LimitesExtendidos(); limites.Basicos.Banderas = 0x2000; // KILL_ON_JOB_CLOSE mata todo el árbol al cerrar el Job.
       if (!SetInformationJobObject(job, 9, ref limites, (uint)Marshal.SizeOf(limites))) throw new Win32Exception();
       var info = new ProcessStartInfo(ejecutable, argumentos);
       info.WorkingDirectory = directorio; info.UseShellExecute = false; info.CreateNoWindow = true;
@@ -85,23 +85,31 @@ namespace Mesa {
       proceso.OutputDataReceived += (s,e) => { if (e.Data == null) salidaFin.Set(); else Guardar(e.Data); };
       proceso.ErrorDataReceived += (s,e) => { if (e.Data == null) errorFin.Set(); else Guardar(e.Data); };
       proceso.Start();
-      Id = proceso.Id; Inicio = proceso.StartTime.ToUniversalTime().ToString("o"); Nombre = proceso.ProcessName;
+      proceso.BeginOutputReadLine(); proceso.BeginErrorReadLine();
+      Id = proceso.Id;
+      // Un CLI puede morir antes de consultar sus metadatos. Su salida ya se está leyendo.
+      try { Inicio = proceso.StartTime.ToUniversalTime().ToString("o"); } catch (InvalidOperationException) {} catch (Win32Exception) {}
+      try { Nombre = proceso.ProcessName; } catch (InvalidOperationException) {} catch (Win32Exception) {}
       if (!AssignProcessToJobObject(job, proceso.Handle)) {
         int error = Marshal.GetLastWin32Error();
         if (!proceso.HasExited) { proceso.Kill(); throw new Win32Exception(error); }
       }
-      proceso.BeginOutputReadLine(); proceso.BeginErrorReadLine();
       entrada = Task.Run(() => {
         try {
           byte[] bytes = new UTF8Encoding(false).GetBytes(texto ?? "");
           proceso.StandardInput.BaseStream.Write(bytes, 0, bytes.Length);
           proceso.StandardInput.BaseStream.Flush();
-        } catch (Exception e) { fallo = "stdin: " + e.Message; }
-        finally { try { proceso.StandardInput.Close(); } catch {} }
+        } catch (Exception e) { Guardar("AVISO stdin: " + e.Message); }
+        finally { try { proceso.StandardInput.Close(); } catch (Exception e) { Guardar("AVISO stdin al cerrar: " + e.Message); } }
       });
     }
     public void Cortar() {
       if (job != IntPtr.Zero && !TerminateJobObject(job, 124)) throw new Win32Exception();
+    }
+    public bool CortarPorTiempo() {
+      // Decide después de consultar de nuevo el estado, no con el del bucle anterior.
+      if (proceso.HasExited) return false;
+      Cortar(); return true;
     }
     public void Drenar() {
       // Un descendiente puede retener stdout aun después de morir el CLI.
@@ -155,16 +163,22 @@ function Invocar-ProcesoMesa {
   $proceso = New-Object Mesa.Proceso
   $reloj = [Diagnostics.Stopwatch]::StartNew()
   $tiempo = $false
+  $identidadGuardada = -not $AlIniciar
+  $siguienteIntento = 0.0
   try {
     $proceso.Iniciar($ruta, $argsTexto, $Directorio, $Log, $Entrada, [bool]$Ver)
     $identidad = [pscustomobject]@{ cli_pid = $proceso.Id; cli_inicio = $proceso.Inicio; cli_nombre = $proceso.Nombre }
-    if ($AlIniciar) { & $AlIniciar $identidad | Out-Null }
     while (-not $proceso.Terminado) {
-      if ($reloj.Elapsed.TotalSeconds -ge $Segundos) { $tiempo = $true; $proceso.Cortar(); break }
+      if ($reloj.Elapsed.TotalSeconds -ge $Segundos) { $tiempo = $proceso.CortarPorTiempo(); break }
+      if (-not $identidadGuardada -and $reloj.Elapsed.TotalSeconds -ge $siguienteIntento) {
+        try { $identidadGuardada = (& $AlIniciar $identidad) -ne $false } catch { $identidadGuardada = $false }
+        $siguienteIntento = $reloj.Elapsed.TotalSeconds + 1
+      }
       if ($Ver) { while ($null -ne ($linea = $proceso.Siguiente())) { Mostrar-Linea $linea } }
       Start-Sleep -Milliseconds 40
     }
     $proceso.Drenar()
+    if (-not $identidadGuardada) { try { & $AlIniciar $identidad | Out-Null } catch {} }
     if ($Ver) { while ($null -ne ($linea = $proceso.Siguiente())) { Mostrar-Linea $linea } }
     $codigo = if ($tiempo) { 124 } else { $proceso.Codigo }
     if ($proceso.Fallo -and -not $tiempo -and $codigo -eq 0) {

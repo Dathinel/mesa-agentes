@@ -55,6 +55,15 @@ try {
   $rutaEjecutar = Join-Path $h 'ejecutar.ps1'
   $copia = [IO.File]::ReadAllText($rutaEjecutar)
   $copia = $copia.Replace('$env:Path = [Environment]', ('$env:Path = ' + "'$bin;' + [Environment]"))
+  # Barrera solo de la copia: permite adquirir el candado exactamente antes del callback real.
+  $barrera = @'
+param($identidad)
+    if ($env:MESA_FALSO_MODO -eq 'candado' -and -not (Test-Path (Join-Path $env:MESA_FALSO_DIR 'identidad-lista'))) {
+      [IO.File]::WriteAllText((Join-Path $env:MESA_FALSO_DIR 'identidad-lista'), '')
+      while (-not (Test-Path (Join-Path $env:MESA_FALSO_DIR 'candado-listo'))) { Start-Sleep -Milliseconds 10 }
+    }
+'@
+  $copia = $copia.Replace('param($identidad)', $barrera)
   [IO.File]::WriteAllText($rutaEjecutar, $copia, $bom)
   [IO.File]::WriteAllText((Join-Path $h 'costes.ps1'), 'function Mesa-MuestraSesion { return @{} }', $bom)
   [IO.File]::WriteAllText((Join-Path $h 'tokens-calibrador.ps1'), '', $bom)
@@ -62,7 +71,7 @@ try {
   $env:MESA_SIN_AVISOS = '1'; $env:LOCALAPPDATA = $raiz
   . "$h\comun.ps1"
   . "$h\proceso.ps1"
-  Mesa-EscribirJson (Join-Path $datos 'hilos\prueba\hilo.json') @{ id = 'prueba'; lider = 'claude'; participantes = @('claude','codex','agy'); estado = 'abierto' }
+  Mesa-EscribirJson (Join-Path $datos 'hilos\prueba\hilo.json') @{ id = 'prueba'; lider = 'claude'; participantes = @('claude','codex','agy'); estado = 'abierto'; actualizado = (Mesa-IsoNow) }
 
   $falso = @'
 [Console]::InputEncoding = New-Object Text.UTF8Encoding $false
@@ -70,6 +79,7 @@ try {
 $u = New-Object Text.UTF8Encoding $false
 $dir = $env:MESA_FALSO_DIR
 if ($env:MESA_FALSO_MODO -eq 'bloqueo') { Start-Sleep -Seconds 300; exit 0 }
+if ($env:MESA_FALSO_MODO -like 'muere*') { [Console]::Error.WriteLine('error temprano con acción'); exit ([int]$env:MESA_FALSO_MODO.Substring(5)) }
 $texto = [Console]::In.ReadToEnd()
 $argumentos = @($args)
 $indicePrompt = [Array]::IndexOf($argumentos, '-p')
@@ -80,14 +90,27 @@ if ($indicePrompt -ge 0 -and $indicePrompt + 1 -lt $argumentos.Count -and $argum
 [IO.File]::WriteAllText((Join-Path $dir 'argumentos.json'), (ConvertTo-Json -InputObject $argumentos -Compress), $u)
 [Console]::WriteLine('salida áéíóú ñ 中文')
 [Console]::Error.WriteLine('stderr también: pingüino, acción')
-if ($env:MESA_FALSO_MODO -eq 'arbol') {
+if ($env:MESA_FALSO_MODO -in @('arbol','candado')) {
   $p = Start-Process powershell.exe -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',("`"" + (Join-Path (Split-Path -Parent $PSCommandPath) 'hijo.ps1') + "`"") -PassThru -WindowStyle Hidden
   while (-not (Test-Path (Join-Path $dir 'arbol.json'))) { Start-Sleep -Milliseconds 40 }
   Start-Sleep -Seconds 300
 }
 $indice = [Array]::IndexOf($argumentos, '-o')
 if ($indice -ge 0) { [IO.File]::WriteAllText($argumentos[$indice + 1], 'respuesta final con acción', $u) }
-[Console]::WriteLine('{"result":"respuesta con acción","usage":{"input_tokens":13,"output_tokens":7,"total_tokens":20}}')
+if ($env:MESA_FALSO_MODO -in @('herramienta','herramienta-fallo')) {
+  [Console]::WriteLine('{"type":"tool_result","status":"ERROR","message":"quota 401 /login","usage":{"input_tokens":9999}}')
+}
+$cli = [IO.Path]::GetFileNameWithoutExtension($PSCommandPath)
+if ($env:MESA_FALSO_MODO -eq 'fallo-final') {
+  if ($cli -eq 'codex') { [Console]::WriteLine('{"type":"turn.failed","error":{"message":"quota exhausted 429"}}') }
+  elseif ($cli -eq 'agy') { [Console]::WriteLine('{"event":"result","result":{"status":"RESOURCE_EXHAUSTED","message":"quota exhausted 429"}}') }
+  else { [Console]::WriteLine('{"type":"result","is_error":true,"result":"quota exhausted 429"}') }
+} elseif ($cli -eq 'codex') {
+  [Console]::WriteLine('{"type":"turn.completed","usage":{"input_tokens":13,"output_tokens":7,"total_tokens":20}}')
+} else {
+  [Console]::WriteLine('{"type":"result","result":"respuesta con acción","usage":{"input_tokens":13,"output_tokens":7,"total_tokens":20}}')
+}
+if ($env:MESA_FALSO_MODO -eq 'herramienta-fallo') { exit 1 }
 '@
   foreach ($cli in @('codex','claude','agy')) { [IO.File]::WriteAllText((Join-Path $bin "$cli.ps1"), $falso, $bom) }
   $hijo = @'
@@ -158,6 +181,95 @@ Start-Sleep -Seconds 300
   $r = Invocar-ProcesoMesa -Ejecutable (Join-Path $bin 'claude.ps1') -Argumentos @('espacio y "comillas" & %', 'fin\') -Entrada 'di hola ñ' -Directorio $raiz -Log (Join-Path $raiz 'ver.log') -Segundos 10 -Ver
   $argsVer = @(Mesa-LeerJson (Join-Path $env:MESA_FALSO_DIR 'argumentos.json'))
   Caso 'Ver pinta lo guardado y argumentos intactos' 'cada línea llega a Mostrar-Linea; espacios, comillas y barra final intactos' "lineas=$($script:pintadas.Count), argumentos=$($argsVer -join ';')" ($r.salida -eq 0 -and $script:pintadas.Count -eq 3 -and $argsVer[0] -ceq 'espacio y "comillas" & %' -and $argsVer[1] -ceq 'fin\')
+
+  # Errores en herramientas no son errores del CLI, tampoco cuando el proceso sale con 1.
+  $numero = 100
+  foreach ($cli in @('codex','claude','agy')) {
+    foreach ($modo in @('herramienta','herramienta-fallo','fallo-final')) {
+      $caso = Preparar $numero $cli $modo
+      $m = Terminar $caso
+      $ok = if ($modo -eq 'herramienta') { $m.estado -eq 'hecho' -and -not $m.llamada.causa }
+        elseif ($modo -eq 'herramienta-fallo') { $m.estado -eq 'fallo' -and -not $m.llamada.causa }
+        else { $m.estado -eq 'fallo' -and $m.llamada.causa -eq 'sin-cuota' }
+      Caso "Evento final ($cli, $modo)" 'solo el evento final determina fallo y cuota' "estado=$($m.estado), causa=$($m.llamada.causa)" $ok
+      $numero += 10
+    }
+  }
+
+  # Reejecutar el mismo mensaje conserva los logs y enlaces de ambas respuestas.
+  $caso = Preparar 200 codex
+  $m = Terminar $caso; $logPrimero = $m.llamada.log; $contenidoPrimero = [IO.File]::ReadAllText($logPrimero)
+  $m.estado = 'aprobado'; $m | Add-Member -NotePropertyName intentos -NotePropertyValue 1 -Force
+  Mesa-EscribirJson (Ruta-Mensaje 200) $m
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$h\ejecutar.ps1" -Hilo prueba -N 200 | Out-Null
+  $m = Leer-Mensaje 200
+  $respuestas = @(Get-ChildItem (Join-Path $datos 'hilos\prueba') -Filter '*-codex.json' | ForEach-Object { Mesa-LeerJson $_.FullName } | Where-Object { $_.tipo -eq 'respuesta' })
+  Caso 'Un log por intento y enlaces propios' 'intento1 e intento2 intactos y cada respuesta enlaza el suyo' "$logPrimero; $($m.llamada.log)" ($logPrimero -like '*-intento1.log' -and $m.llamada.log -like '*-intento2.log' -and [IO.File]::ReadAllText($logPrimero) -ceq $contenidoPrimero -and $respuestas.llamada.log -contains $logPrimero -and $respuestas.llamada.log -contains $m.llamada.log)
+
+  # Ejecutable de consola real, sin envoltorio PowerShell y sin modelos.
+  $nativo = Join-Path $bin 'falso.exe'
+  Add-Type -OutputAssembly $nativo -OutputType ConsoleApplication -TypeDefinition @'
+using System;
+using System.Text;
+public class CliFalso {
+  public static int Main(string[] args) {
+    Console.InputEncoding = new UTF8Encoding(false); Console.OutputEncoding = new UTF8Encoding(false);
+    Console.Error.WriteLine("diagnóstico temprano: acción");
+    if (args.Length > 0 && args[0] == "muere") return int.Parse(args[1]);
+    Console.WriteLine(Console.In.ReadToEnd()); return 0;
+  }
+}
+'@
+  $node = (Get-Command node.exe -ErrorAction Stop).Source
+  $js = Join-Path $bin 'falso.js'
+  [IO.File]::WriteAllText($js, 'process.stderr.write("diagnóstico temprano: acción\n"); if(process.argv[2]==="muere") process.exit(Number(process.argv[3])); process.stdin.setEncoding("utf8"); process.stdin.on("data", x=>process.stdout.write(x));', $utf8)
+  foreach ($directo in @($nativo, $node)) {
+    $prefArgs = @(if ($directo -eq $node) { $js })
+    $logDirecto = Join-Path $raiz 'directo.log'
+    $r = Invocar-ProcesoMesa -Ejecutable $directo -Argumentos $prefArgs -Entrada 'UTF-8 áéíóú ñ 中文' -Directorio $raiz -Log $logDirecto
+    $txt = [IO.File]::ReadAllText($logDirecto, $utf8)
+    Caso "UTF-8 directo ($([IO.Path]::GetFileName($directo)))" 'salida y entrada UTF-8 intactas' $txt ($r.salida -eq 0 -and $txt.Contains('UTF-8 áéíóú ñ 中文') -and $txt.Contains('diagnóstico temprano: acción'))
+    foreach ($salida in @(0,1)) {
+      $r = Invocar-ProcesoMesa -Ejecutable $directo -Argumentos ($prefArgs + @('muere', "$salida")) -Entrada ('x' * 4000000) -Directorio $raiz -Log $logDirecto
+      $txt = [IO.File]::ReadAllText($logDirecto, $utf8)
+      Caso "Muerte antes de stdin ($([IO.Path]::GetFileName($directo)), $salida)" 'código real, error temprano y aviso stdin incluso al salir con 1' "salida=$($r.salida); $txt" ($r.salida -eq $salida -and $txt.Contains('diagnóstico temprano: acción') -and $txt.Contains('AVISO stdin:'))
+    }
+    # Callback retrasa la comprobación hasta después de la salida y del límite.
+    $r = Invocar-ProcesoMesa -Ejecutable $directo -Argumentos ($prefArgs + @('muere','1')) -Directorio $raiz -Log $logDirecto -Segundos 0.3 -AlIniciar { param($id) Start-Sleep -Milliseconds 700; return $true }
+    Caso "Salida al vencer límite ($([IO.Path]::GetFileName($directo)))" 'código 1 real y sin causa tiempo' "salida=$($r.salida), causa=$($r.causa)" ($r.salida -eq 1 -and -not $r.causa)
+  }
+
+  # Candado real ocupado cuando el callback intenta guardar la identidad.
+  $env:MESA_FALSO_MODO = 'bloqueo'
+  $pruebaLock = Join-Path $raiz 'identidad.lock'
+  $lock = [IO.File]::Open($pruebaLock,'OpenOrCreate','ReadWrite','None')
+  $estado = @{ intentos = 0; vivo = $false; guardado = $false }
+  try {
+    $r = Invocar-ProcesoMesa -Ejecutable (Join-Path $bin 'codex.ps1') -Directorio $raiz -Log (Join-Path $raiz 'candado.log') -Segundos 3 -AlIniciar {
+      param($id)
+      $estado.intentos++
+      if ($estado.intentos -eq 2) { $estado.vivo = Mesa-ProcesoVivo $id.cli_pid $id.cli_inicio $id.cli_nombre; $lock.Dispose() }
+      $c = [IO.File]::Open($pruebaLock,'OpenOrCreate','ReadWrite','None')
+      $c.Dispose(); $estado.guardado = $true; return $true
+    }
+  } finally { $lock.Dispose() }
+  Caso 'Candado ocupado no mata CLI y reintenta' 'CLI sigue vivo hasta timeout y segunda escritura funciona' "intentos=$($estado.intentos), vivo=$($estado.vivo), guardado=$($estado.guardado), salida=$($r.salida)" ($estado.intentos -ge 2 -and $estado.vivo -and $estado.guardado -and $r.salida -eq 124)
+
+  $caso = Preparar 210 codex candado
+  Esperar { Test-Path (Join-Path $caso.carpeta 'identidad-lista') }
+  $lock = [IO.File]::Open((Join-Path $datos 'hilos\prueba\hilo.lock'),'OpenOrCreate','ReadWrite','None')
+  try {
+    [IO.File]::WriteAllText((Join-Path $caso.carpeta 'candado-listo'), '')
+    $arbol = Arbol $caso
+    Start-Sleep -Seconds 11
+    $vivosBloqueado = Vivos $arbol
+  } finally { $lock.Dispose() }
+  Esperar { (Leer-Mensaje 210).llamada.cli_pid -gt 0 }
+  $ll = (Leer-Mensaje 210).llamada
+  $enCurso = Mesa-LeerJson (Join-Path $datos "agentes\en-curso-$($caso.proceso.Id).json")
+  Caso 'Persistencia real con candado ocupado' 'CLI y árbol siguen vivos tras 11s; identidad guardada al liberar' "descendientes=$vivosBloqueado, cli=$($ll.cli_pid), enCurso=$($enCurso.cli_pid)" ($vivosBloqueado -eq 2 -and (Mesa-ProcesoVivo $ll.cli_pid $ll.cli_inicio $ll.cli_nombre) -and $ll.cli_pid -eq $enCurso.cli_pid)
+  Stop-Process -Id $ll.cli_pid -Force
+  $null = Terminar $caso
 
   $caso = Preparar 70 codex arbol
   $arbol = Arbol $caso

@@ -62,6 +62,25 @@ function Resolver-RutaEncargo($encargo, $dirBase) {
   return $encargo
 }
 
+function Leer-EventoFinal($herramienta, $logPath) {
+  if (-not (Test-Path -LiteralPath $logPath)) { return '' }
+  $raw = [IO.File]::ReadAllText($logPath, [Text.Encoding]::UTF8)
+  $ultimo = $null
+  # JSON completo (salida no streaming, incluso formateada) o un evento JSON por línea.
+  try { $eventos = @($raw | ConvertFrom-Json -ErrorAction Stop) } catch {
+    $eventos = @(); foreach ($linea in $raw -split "`r?`n") {
+      try { $eventos += ($linea | ConvertFrom-Json -ErrorAction Stop) } catch {}
+    }
+  }
+  foreach ($ev in $eventos) {
+    if (-not $ev) { continue }
+    if ($herramienta -eq 'codex' -or $ev.type -eq 'result' -or $ev.event -eq 'result' -or
+      (-not $ev.type -and -not $ev.event -and ($ev.result -or $ev.status))) { $ultimo = $ev }
+  }
+  if ($ultimo) { return ($ultimo | ConvertTo-Json -Depth 30 -Compress) }
+  return ''
+}
+
 function Extraer-ResultadoYTokens($herramienta, $logPath, $finalTxt, $promptTexto) {
   $entrada = 0; $salida = 0; $total = 0; $medido = $false
   $textoResp = ''
@@ -108,9 +127,9 @@ function Extraer-ResultadoYTokens($herramienta, $logPath, $finalTxt, $promptText
     if (Test-Path -LiteralPath $logPath) {
       $raw = ([IO.File]::ReadAllText($logPath, [System.Text.Encoding]::UTF8)).Trim()
       if ($raw) {
-        # El log mezcla avisos de la consola con el JSON final: se toma la última línea JSON con «usage».
-        $lineaJson = @($raw -split "`r?`n" | Where-Object { $_ -match '^\s*\{' -and $_ -match '"usage"' }) | Select-Object -Last 1
-        if ($lineaJson) { $raw = $lineaJson }
+        # El resultado final puede no traer usage; un evento de herramienta nunca lo sustituye.
+        $jsonFinal = Leer-EventoFinal $herramienta $logPath
+        if ($jsonFinal) { $raw = $jsonFinal }
         try {
           $obj = $raw | ConvertFrom-Json
           $u = if ($obj.usage) { $obj.usage } elseif ($obj.message.usage) { $obj.message.usage } elseif ($obj.result.usage) { $obj.result.usage } else { $null }
@@ -207,8 +226,9 @@ function Ejecutar-Mensaje($carpetaHilo, $archivoMsg) {
   $carpetaLogs = Join-Path $carpetaHilo 'logs'
   New-Item -ItemType Directory -Force -Path $carpetaLogs | Out-Null
   $prefijo = '{0:D4}-{1}' -f [int]$m.n, $herramienta
-  $logPath  = Join-Path $carpetaLogs "$prefijo.log"
-  $finalTxt = Join-Path $carpetaLogs "$prefijo-final.txt"
+  $numeroIntento = 1 + $(if ($m.PSObject.Properties['intentos']) { [int]$m.intentos } else { 0 })
+  $logPath  = Join-Path $carpetaLogs "$prefijo-intento$numeroIntento.log"
+  $finalTxt = Join-Path $carpetaLogs "$prefijo-intento$numeroIntento-final.txt"
   $promptTmp = Join-Path $carpetaLogs "$prefijo-prompt.txt"
 
   $rutaEncargo = Resolver-RutaEncargo $m.encargo $workDir
@@ -261,13 +281,17 @@ function Ejecutar-Mensaje($carpetaHilo, $archivoMsg) {
   $identidadCli = @{}
   $alIniciar = {
     param($identidad)
+    $ErrorActionPreference = 'Stop'
     foreach ($campo in @('cli_pid', 'cli_inicio', 'cli_nombre')) {
       $identidadCli[$campo] = $identidad.$campo
       $m.llamada[$campo] = $identidad.$campo
       $estadoCurso[$campo] = $identidad.$campo
     }
-    $candadoCli = Mesa-BloquearHilo $carpetaHilo
-    try { Mesa-EscribirJson $archivoMsg $m; Mesa-EscribirJson $enCurso $estadoCurso } finally { $candadoCli.Dispose() }
+    # Intento sin espera: el candado ocupado nunca corta el CLI ni bloquea su límite de tiempo.
+    try { $candadoCli = [IO.File]::Open((Join-Path $carpetaHilo 'hilo.lock'), 'OpenOrCreate', 'ReadWrite', 'None') }
+    catch { return $false }
+    try { Mesa-EscribirJson $archivoMsg $m; Mesa-EscribirJson $enCurso $estadoCurso; return $true }
+    finally { $candadoCli.Dispose() }
   }
   if ($Simular) {
     $simResp = "Respuesta simulada de $($m.para) ($herramienta/$modelo) al mensaje #$($m.n) en $hiloId."
@@ -354,10 +378,10 @@ function Ejecutar-Mensaje($carpetaHilo, $archivoMsg) {
     $datos.calidad = 'simulado'
   }
 
-  $cola = if (Test-Path -LiteralPath $logPath) { $t = [IO.File]::ReadAllText($logPath); $t.Substring([Math]::Max(0, $t.Length - 4000)) } else { '' }
-  # Un «status: ERROR» es fallo aunque el CLI salga con 0; la causa solo lo clasifica.
-  if ($codigoSalida -eq 0 -and $cola -match '"status"\s*:\s*"(ERROR|RESOURCE_EXHAUSTED)"') { $codigoSalida = 1 }
-  $causa = if ($resultadoProceso.causa -eq 'tiempo') { [pscustomobject]@{ causa = 'tiempo'; hasta = $null } } elseif ($codigoSalida -ne 0) { Mesa-CausaFallo $cola } else { $null }
+  $eventoFinal = Leer-EventoFinal $herramienta $logPath
+  $falloFinal = Mesa-CausaFallo $eventoFinal
+  if ($codigoSalida -eq 0 -and $falloFinal.fallo) { $codigoSalida = 1 }
+  $causa = if ($resultadoProceso.causa -eq 'tiempo') { [pscustomobject]@{ causa = 'tiempo'; hasta = $null } } elseif ($codigoSalida -ne 0) { $falloFinal } else { $null }
   $estadoFinal = if ($codigoSalida -eq 0) { 'hecho' } else { 'fallo' }
   $m.estado = $estadoFinal
   $m.llamada = [ordered]@{ inicio = $inicioIso; fin = $finIso; salida = [int]$codigoSalida; log = $logPath; pid = $PID; pid_inicio = $yoProc.StartTime.ToUniversalTime().ToString('o'); pid_nombre = $yoProc.ProcessName; intento = $intentoId; causa = $causa.causa; hasta = $causa.hasta }

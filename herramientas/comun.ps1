@@ -41,13 +41,29 @@ function Mesa-UltimaActividad($agente) {
 
 # Por qué falló una llamada, leyendo la cola de su log: cuota, login o red no son muertes reales y se tratan aparte.
 function Mesa-CausaFallo([string]$texto) {
+  # Solo campos de error del evento final; nunca contenido de herramientas o resultados correctos.
+  try { $ev = $texto | ConvertFrom-Json -ErrorAction Stop } catch { $ev = $null }
+  if ($ev) {
+    $esResultado = $ev.type -eq 'result' -or $ev.event -eq 'result' -or (-not $ev.type -and -not $ev.event)
+    $r = if ($ev.result -and $ev.result -isnot [string]) { $ev.result } else { $ev }
+    $fallo = ($esResultado -and ($ev.is_error -eq $true -or $ev.subtype -like 'error*' -or
+      $r.status -in @('ERROR','RESOURCE_EXHAUSTED','FAILED') -or $r.error_code -or $r.error)) -or
+      $ev.type -in @('error','turn.failed')
+    if (-not $fallo) { return $null }
+    $texto = @($r.status, $r.error_code, $r.error, $r.errors, $ev.error, $ev.errors) | ConvertTo-Json -Depth 20 -Compress
+    # message/result solo son texto de error cuando el evento final declara fallo.
+    $texto += ' ' + [string]$r.message
+    if ($ev.is_error -eq $true -and $ev.result -is [string]) { $texto += ' ' + $ev.result }
+  } elseif ($texto -notmatch '^\s*Error:\s*(401\s+Unauthorized|connection failed|RESOURCE_EXHAUSTED)') {
+    return $null
+  }
   if ($texto -match '(?i)RESOURCE_EXHAUSTED|usage limit|rate.?limit|quota|\b429\b|limit reached|out of credits') {
     $hasta = if ($texto -match '(?i)resets? in (\d+)h(\d+)m') { (Get-Date).AddHours([int]$Matches[1]).AddMinutes([int]$Matches[2]) } else { (Get-Date).AddHours(1) }
-    return [pscustomobject]@{ causa = 'sin-cuota'; hasta = $hasta.ToString('yyyy-MM-ddTHH:mm:sszzz') }
+    return [pscustomobject]@{ fallo = $true; causa = 'sin-cuota'; hasta = $hasta.ToString('yyyy-MM-ddTHH:mm:sszzz') }
   }
-  if ($texto -match '(?i)\b401\b|unauthori[sz]ed|not logged in|please (log ?in|sign in)|/login|invalid (api key|credentials)|token (has )?expired') { return [pscustomobject]@{ causa = 'necesita-login'; hasta = $null } }
-  if ($texto -match '(?i)waiting for network|connection failed|ENOTFOUND|ECONNRESET|network error') { return [pscustomobject]@{ causa = 'red'; hasta = $null } }
-  $null
+  if ($texto -match '(?i)\b401\b|unauthori[sz]ed|not logged in|please (log ?in|sign in)|/login|invalid (api key|credentials)|token (has )?expired') { return [pscustomobject]@{ fallo = $true; causa = 'necesita-login'; hasta = $null } }
+  if ($texto -match '(?i)waiting for network|connection failed|ENOTFOUND|ECONNRESET|network error') { return [pscustomobject]@{ fallo = $true; causa = 'red'; hasta = $null } }
+  [pscustomobject]@{ fallo = $true; causa = $null; hasta = $null }
 }
 
 # Tipo de un encargo para decidir si se autoaprueba: lo declara quien delega (-Tipo) o se deduce de su carpeta.

@@ -13,3 +13,11 @@ Cada problema real que aparece se anota aquí con su síntoma, su causa y qué h
 | 18-oct | Un reclamo sigue después de entregar | El reclamo solo se suelta al **aceptar** la entrega; si nadie la revisa, sigue. | Revisar la entrega (`mesa.ps1 revisar`) o soltarlo (`soltar`). El supervisor avisa a los 60 min sin actividad. |
 | 18-oct | `probar-oficina.ps1` fallaba con `cd ..` | Tras los ajustes de falsos positivos, el vigía ya no marca `cd ..`. | Prueba actualizada. |
 | 17-oct | Un encargo con comillas llega partido al agente | PowerShell 5.1 no escapa las comillas al pasar argumentos a un `.exe`. | `ejecutar.ps1` las escapa con la regla de Windows. Límite: el prompt de claude y agy va por argumento (~32 000 caracteres); un encargo más largo, en archivo (`-Encargo`). |
+
+## Ciclo de vida del lanzador (20-oct)
+
+Cada intento conserva su log `NNNN-agente-intentoK.log` y su resultado final; las respuestas del hilo enlazan al intento que las produjo. Los errores de stdin se registran como avisos: el código real del CLI determina el resultado.
+
+Al terminar un encargo se cierra el Job de Windows y se mata todo el árbol que lanzó el agente, incluidos servidores o procesos que pretendiera dejar en segundo plano.
+
+Riesgo bajo pendiente: `Process.Start` arranca el CLI antes de asignarlo al Job. Un CLI que cree un nieto inmediatamente podría dejarlo fuera del Job. Evitarlo requiere arranque nativo suspendido y redirecciones mediante handles heredables; se pospone para no reemplazar a la vez el transporte probado de PowerShell 5.1. Los descendientes creados después de asignar el Job sí quedan contenidos.
