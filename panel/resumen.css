@@ -328,6 +328,8 @@ button {
 .tarjeta-cabecera {
   padding: 14px 16px;
   display: flex;
+  flex-wrap: wrap;
+  row-gap: 8px;
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid var(--borde-suave);
@@ -363,6 +365,8 @@ button {
 }
 
 .insignia-lider {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
   display: inline-flex;
   align-items: center;
   gap: 4px;
