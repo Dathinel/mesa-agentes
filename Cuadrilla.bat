@@ -28,7 +28,7 @@ if /i "%~1"=="diagnostico" ( %PSA% -File "%H%\mesa.ps1" diagnostico & goto fin )
 if /i "%~1"=="pruebas" ( call "%MESA%\Probar.bat" & goto fin )
 if /i "%~1"=="cerrar" goto cerrar
 
-set "WT=wt -w mesa new-tab --title Claude --tabColor #E8833A -d "%MESA%" cmd /k ""%H%\abrir-claude.cmd" "%TRABAJO%" %MODO%" ; split-pane -V --title Codex -d "%MESA%" %PSA% -File "%H%\trabajador.ps1" -Agente codex ; split-pane -H --title agy -d "%MESA%" %PSA% -File "%H%\trabajador.ps1" -Agente agy ; split-pane -H --title Tablero -d "%MESA%" %PSA% -File "%H%\tablero.ps1""
+set "WT=wt -w mesa new-tab --title Claude --tabColor #E8833A -d "%MESA%" cmd /d /k call "%H%\abrir-claude.cmd" "%TRABAJO%" %MODO% ; split-pane -V --title Codex -d "%MESA%" %PSA% -File "%H%\trabajador.ps1" -Agente codex ; split-pane -H --title agy -d "%MESA%" %PSA% -File "%H%\trabajador.ps1" -Agente agy ; split-pane -H --title Tablero -d "%MESA%" %PSA% -File "%H%\tablero.ps1""
 if /i "%~1"=="prueba" ( echo COMANDO_WT: %WT% & goto fin )
 
 echo.
