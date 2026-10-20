@@ -158,9 +158,12 @@ switch ($Comando) {
     $ll = $m.llamada
     if (-not $ll.cli_pid -or $enCurso.cli_pid -ne $ll.cli_pid -or $enCurso.cli_inicio -ne $ll.cli_inicio -or $enCurso.cli_nombre -ne $ll.cli_nombre -or
         -not (Mesa-ProcesoVivo $ll.cli_pid $ll.cli_inicio $ll.cli_nombre)) { throw "La identidad del CLI de #$N ya no coincide: no se corta nada." }
+    # El marcador va antes de matar: así el fallo que deja ejecutar.ps1 ya nace como corte a propósito.
+    $marca = Join-Path $Global:Mesa_Raiz "cortes\$Hilo-$N.json"
+    Mesa-EscribirJson $marca ([ordered]@{ hilo = $Hilo; n = $N; intento = $ll.intento; por = $De; hora = Mesa-IsoNow; cli_pid = $ll.cli_pid })
     # El Job de ejecutar.ps1 recoge todos los descendientes al morir su raíz, incluso si ya quedaron huérfanos.
-    Stop-Process -Id $ll.cli_pid -Force -ErrorAction Stop
-    Write-Output "CORTADO #$N`: CLI $($ll.cli_pid) ($($ll.cli_nombre)) y sus descendientes. Luego: mesa.ps1 reintentar -Hilo $Hilo -N $N -De $De"
+    try { Stop-Process -Id $ll.cli_pid -Force -ErrorAction Stop } catch { Remove-Item -LiteralPath $marca -ErrorAction SilentlyContinue; throw }
+    Write-Output "CORTADO #$N`: CLI $($ll.cli_pid) ($($ll.cli_nombre)) y sus descendientes. Es un corte a propósito, no un fallo. Para relanzarlo: mesa.ps1 reintentar -Hilo $Hilo -N $N -De $De"
   }
   'diagnostico' {
     # Por cmd: codex es un .ps1/.cmd de npm que escribe avisos en stderr y, con ErrorAction Stop, parecía no estar.
@@ -234,7 +237,7 @@ switch ($Comando) {
       $vistas=Mesa-LeerJson $ruta
       $existe=@(Mesa-RegistroLocal (Join-Path $Global:Mesa_Raiz 'alertas.jsonl') | Where-Object id -eq $Revisada)
       if (!$existe.Count) { throw 'No existe esa alerta.' }
-      Mesa-EscribirJson $ruta @{ ids=@(@($vistas.ids)+$Revisada | Where-Object { $_ } | Select-Object -Unique); actualizado=(Mesa-IsoNow) }
+      Mesa-EscribirJson $ruta @{ ids=@(@($vistas.ids)+$Revisada | Where-Object { $_ } | Select-Object -Unique); motivos=$vistas.motivos; actualizado=(Mesa-IsoNow) }
       Write-Output "Alerta $Revisada revisada."
     } else {
       $items=@(Mesa-Alertas $Horas $Nivel)
@@ -852,6 +855,8 @@ switch ($Comando) {
     if (-not $arch) { throw "No existe el mensaje #$N en el hilo '$Hilo'" }
 
     $m = Mesa-LeerJson $arch.FullName
+    # Aprobar un encargo ya hecho lo relanzaría: solo se aprueba lo pendiente o lo escalado.
+    if ($m.estado -notin @('pendiente', 'escalado')) { throw "#$N está '$($m.estado)': solo se aprueba un mensaje pendiente o escalado (para relanzar un encargo: reintentar)." }
     $ahora = Mesa-IsoNow
     $m.estado = 'aprobado'
     if ($m.traspaso) {
