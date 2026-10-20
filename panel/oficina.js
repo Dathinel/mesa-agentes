@@ -159,13 +159,19 @@ const dText = (txt, x, y, size = 11, col = '#fff', align = 'left', bold = false,
 };
 
 // Ajusta el tamaño (hasta un mínimo) y, si aún no cabe, recorta con «…».
+const shortTitle = (s, max = 24) => {
+  if (!s) return '—';
+  const t = String(s).trim();
+  return t.length <= max ? t : t.slice(0, max - 1).trimEnd() + '…';
+};
+
 function fitText(txt, x, y, maxW, size = 6, col = '#fff', align = 'left', bold = false, min = null) {
   let s = String(txt ?? ''), sz = size;
   const lo = min ?? Math.max(3.6, size * 0.82);
   ctx.font = fuente(sz, bold);
   while (sz > lo && ctx.measureText(s).width > maxW) { sz -= 0.2; ctx.font = fuente(sz, bold); }
   // Por debajo de 9 px reales no se lee en pantalla: el texto se quita y queda en la vista Resumen.
-  if (sz * escalaCss < 9) return;
+  // Texto siempre visible; se recorta con puntos suspensivos si no cabe en maxW
   if (ctx.measureText(s).width > maxW) {
     while (s.length > 1 && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
     s = s.trimEnd() + '…';
@@ -243,6 +249,11 @@ function personajeDe(modelo, agentId) {
 }
 const modeloCorto = m => String(m || '').replace(/^claude-/, '').replace(/-\d+(-\d+)*$/, '').replace(/^gemini-/, '') || 'pasante';
 const horaCorta = v => v ? new Date(v).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+
+function entregasDeHilosAbiertos() {
+  const hilosAbiertos = new Set((data?.hilos || []).filter(h => h.estado === 'abierto').map(h => h.id));
+  return asArray(data?.entregas).filter(e => e && e.estado !== 'archivada' && (!e.hilo || hilosAbiertos.has(e.hilo)));
+}
 
 function activeThread() {
   return data?.hilos?.find(h => h.id === selected) || data?.hilos?.[0];
@@ -908,7 +919,7 @@ function openInteractiveModal(type, opts = {}) {
       </div>
       <div class="modal-field">
         <h4>HILO ACTIVO</h4>
-        <p>${esc(hAct?.titulo || '—')} · ♛ Líder: <strong>${esc(hAct?.lider || '—')}</strong> · Participantes: ${esc((hAct?.participantes || []).join(', ') || '—')}</p>
+        <p>${esc(hAct?.titulo || '—')} · ♛ Líder de ${esc(hAct ? shortTitle(hAct.titulo || hAct.id, 24) : '—')}: <strong>${esc(hAct?.lider || '—')}</strong> · Participantes: ${esc((hAct?.participantes || []).join(', ') || '—')}</p>
       </div>
     `;
   } else if (type === 'cafe') {
@@ -943,7 +954,7 @@ function openInteractiveModal(type, opts = {}) {
     tag.style.background = '#d97706';
     tag.style.color = '#fff';
     title.textContent = 'Bandeja de entregas · Sala de reuniones';
-    const entregas = asArray(data?.entregas).filter(e => e.estado !== 'archivada');
+    const entregas = entregasDeHilosAbiertos();
     meta.innerHTML = `
       <div><strong>No archivadas:</strong> <span>${entregas.length}</span></div>
       <div><strong>Ubicación:</strong> <span>Mesa de reuniones</span></div>
@@ -2017,6 +2028,7 @@ function drawDeskMonitor(x, y, w, h, agent, t, on) {
 
 // Cartel sobre la mesa cuando el agente no está («Vuelvo pronto», «En reunión»…).
 function cartelMesa(cx, y, texto, w = 54, size = 5, alarma = false) {
+  if (!texto || !String(texto).trim()) return;
   const h = size + 8;
   R(cx - w / 2 + 6, y + h - 1, 2, 5, '#5a3d28'); R(cx + w / 2 - 8, y + h - 1, 2, 5, '#5a3d28');
   R(cx - w / 2 - 1, y - 1, w + 2, h + 2, alarma ? '#7f1d1d' : '#78350f');
@@ -2328,7 +2340,8 @@ function drawMeetingRoom(L, t, now) {
     const hAct = activeThread();
     fitText(hAct ? 'SIN REUNIÓN' : 'SALA LIBRE', x + w / 2, py + 17, pw - 16, 7.5, '#6ee7b7', 'center', true);
     fitText(ultimaReunion ? `Última: ${ETIQUETA_REUNION[ultimaReunion.tipo]} · ${ultimaReunion.tema}` : `Hilo activo: ${hAct?.titulo || '—'}`, x + w / 2, py + 32, pw - 16, 6.5, '#fef08a', 'center');
-    fitText(`♛ Líder: ${hAct?.lider || '—'} · ${hAct?.conteo_mensajes ?? (hAct?.mensajes || []).length} mensajes`, x + w / 2, py + 46, pw - 16, 6, '#94a3b8', 'center');
+    const titLid = hAct ? `♛ Líder de ${shortTitle(hAct.titulo || hAct.id, 20)}: ${hAct.lider || '—'}` : '♛ Sin líder';
+    fitText(`${titLid} · ${hAct?.conteo_mensajes ?? (hAct?.mensajes || []).length} mensajes`, x + w / 2, py + 46, pw - 16, 6, '#94a3b8', 'center');
   }
 
   // Quién está sentado (los que aún andan se dibujan encima de la planta).
@@ -2354,7 +2367,7 @@ function drawMeetingRoom(L, t, now) {
   R(g.tx + g.tw / 2 - 12, g.ty + 10, 24, 10, '#1f2937'); R(g.tx + g.tw / 2 - 10, g.ty + 11, 20, 7, m ? '#6ee7b7' : '#334155');
 
   // Bandeja física de entregas en la mesa de reuniones (contrato #23)
-  const entregasNoArchivadas = asArray(data?.entregas).filter(e => e.estado !== 'archivada');
+  const entregasNoArchivadas = entregasDeHilosAbiertos();
   const bx = g.tx + 24, by = g.ty + 4, bw = 100, bh = Math.max(18, g.th - 8);
   R(bx - 1, by - 1, bw + 2, bh + 2, '#2e1c10');
   R(bx, by, bw, bh, '#3d2516');
@@ -2495,7 +2508,8 @@ const fechaCorta = v => { const d = new Date(v); return isNaN(d) ? '—' : d.toL
 function archivoDatos() {
   const hilos = (data?.hilos || []).filter(hiloCerrado).map(h => {
     const u = h.ultimo_mensaje || (h.mensajes || []).at(-1);
-    return { tag: (u?.estado || h.estado || 'cerrado').toUpperCase(), titulo: h.titulo || h.id, sub: `Líder: ${h.lider || '—'} · ${fechaCorta(h.actualizado || u?.fecha)} · ${h.conteo_mensajes ?? (h.mensajes || []).length} mensajes`, orden: Date.parse(h.actualizado || u?.fecha || '') || 0 };
+    const titH = shortTitle(h.titulo || h.id, 24);
+    return { tag: (u?.estado || h.estado || 'cerrado').toUpperCase(), titulo: h.titulo || h.id, sub: `Líder de ${titH}: ${h.lider || '—'} · ${fechaCorta(h.actualizado || u?.fecha)} · ${h.conteo_mensajes ?? (h.mensajes || []).length} mensajes`, orden: Date.parse(h.actualizado || u?.fecha || '') || 0 };
   });
   const vistosE = new Set(), encargos = [];
   for (const a of data?.agentes || []) for (const x of a.archivados || []) {
@@ -2697,14 +2711,12 @@ function frame() {
   requestAnimationFrame(frame);
 }
 
-// Franja urgente: los seis estados de la mesa y lo que espera a Daniel (mismo recuento que la vista Resumen).
+// Franja urgente: los seis estados y «Te necesito» vienen de un solo recuento del servidor (franja en estado.ps1), igual que el tablero.
 function actualizarFranjaUrgente(d) {
   const f = $('franja-urgente');
-  if (!f) return;
-  const cuenta = { trabajando: 0, libre: 0, 'esperando-daniel': 0, 'sin-cuota': 0, caido: 0, apagado: 0 };
-  for (const a of d?.agentes || []) if (a.estado_mesa in cuenta) cuenta[a.estado_mesa]++;
-  const aprobaciones = (d?.pendientes || []).filter(p => p.texto && (p.texto.includes('ESCALADO') || p.texto.includes('aprobación'))).length;
-  const necesito = aprobaciones + cuenta['esperando-daniel'] + cuenta.caido + (d?.alertas || []).filter(a => a.nivel === 'alto' && !a.revisada).length;
+  if (!f || !d?.franja) return;
+  const cuenta = d.franja.estados;
+  const necesito = d.franja.te_necesito;
   const etiquetas = [['trabajando', 'Trabajando'], ['libre', 'Libre'], ['esperando-daniel', 'Esperando a Daniel'], ['sin-cuota', 'Sin cuota'], ['caido', 'Caído'], ['apagado', 'Apagado']];
   f.innerHTML = etiquetas.map(([k, t]) => `<span>${t}: ${cuenta[k]}</span>`).join('') + `<span class="necesito${necesito ? '' : ' cero'}">Te necesito: ${necesito}</span>`;
 }

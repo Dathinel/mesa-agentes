@@ -76,7 +76,8 @@
     modalHiloMensajes: document.getElementById('modal-hilo-mensajes'),
     btnCerrarModal: document.getElementById('btn-cerrar-modal'),
     btnCerrarModalPie: document.getElementById('btn-cerrar-modal-pie'),
-    tostada: document.getElementById('tostada-aviso')
+    tostada: document.getElementById('tostada-aviso'),
+    badgeDemostracion: document.getElementById('badge-demostracion')
   };
 
   // =========================================================================
@@ -174,48 +175,106 @@
   // Carga de Datos Resiliente
   // =========================================================================
   let origenDatos = 'mesa';
+  let ultimoDatoReal = null;
+
+  try {
+    const guardado = sessionStorage.getItem('mesa_ultimo_estado_real');
+    if (guardado) {
+      ultimoDatoReal = JSON.parse(guardado);
+    }
+  } catch (_) {}
+
+  function mostrarAvisoDemostracion(mostrar) {
+    if (dom.badgeDemostracion) {
+      dom.badgeDemostracion.hidden = !mostrar;
+    }
+  }
+
+  function renderizarSinConexion() {
+    dom.textoFrescura.textContent = 'Sin conexión con la mesa';
+    dom.puntoFrescura.className = 'punto-frescura frescura-rojo';
+    dom.alertaTrabajador.hidden = true;
+
+    dom.cuadriculaAgentes.innerHTML = `
+      <div class="panel-vacio" style="grid-column: 1 / -1; padding: 2.5rem 1rem; text-align: center;">
+        <span class="icono-atencion" aria-hidden="true" style="font-size: 28px; display: block; margin-bottom: 0.5rem;">⚠️</span>
+        <h3 style="font-size: 18px; margin: 0 0 0.5rem 0; color: var(--texto-principal);">Sin conexión con la mesa</h3>
+        <p class="texto-vacio" style="font-size: 14px; margin: 0;">No se reciben datos del servidor de la mesa ni hay registros previos en esta sesión.</p>
+      </div>
+    `;
+
+    dom.contadorTeNecesito.textContent = '—';
+    dom.contadorTeNecesito.className = 'contador-insignia cero';
+    dom.seccionTeNecesito.classList.remove('tiene-incidencias');
+    dom.listaTeNecesito.innerHTML = `
+      <div class="panel-vacio">
+        <p class="texto-vacio" style="font-size: 14px;">Sin conexión con la mesa.</p>
+      </div>
+    `;
+
+    dom.listaHilos.innerHTML = '<p class="texto-vacio" style="font-size: 14px; padding: 1.5rem 0;">Sin conexión con la mesa.</p>';
+    dom.cuerpoTablaMetricas.innerHTML = '';
+    dom.pistasTiempo.innerHTML = '<p class="texto-vacio" style="font-size: 14px; padding: 1.5rem 0;">Sin conexión con la mesa.</p>';
+    dom.listaReclamos.innerHTML = '<p class="texto-vacio" style="font-size: 14px; padding: 1.5rem 0;">Sin conexión con la mesa.</p>';
+
+    ejecutarDiagnosticoAccesibilidad();
+  }
 
   async function cargarDatos() {
     const params = new URLSearchParams(window.location.search);
-    const forzarEjemplo = params.get('fuente') === 'ejemplo' || params.get('mock') === '1' || window.location.protocol === 'file:';
+    const soloEjemplo = params.get('ejemplo') === '1';
 
-    let datos = null;
-    origenDatos = 'mesa';
-
-    if (!forzarEjemplo) {
-      try {
-        const token = params.get('token') || (typeof window.__MESA_TOKEN__ !== 'undefined' ? window.__MESA_TOKEN__ : null) || localStorage.getItem('mesa_token');
-        const headers = { 'Cache-Control': 'no-cache' };
-        if (token) {
-          headers['X-Mesa-Token'] = token;
-        }
-        const resp = await fetch('/api/estado', { headers });
-        if (resp.ok) {
-          datos = await resp.json();
-        }
-      } catch (err) {
-        // En caso de fallo o si el servidor no está en ejecución, se usa resumen-ejemplo.json
-      }
-    }
-
-    if (!datos) {
+    if (soloEjemplo) {
       origenDatos = 'ejemplo';
+      mostrarAvisoDemostracion(true);
       try {
         const respMock = await fetch('resumen-ejemplo.json', { cache: 'no-cache' });
         if (respMock.ok) {
-          datos = await respMock.json();
+          datosActuales = await respMock.json();
+          renderizarVista(datosActuales);
+          return;
         }
       } catch (errMock) {
         console.error('No se pudo cargar resumen-ejemplo.json:', errMock);
       }
+      dom.textoFrescura.textContent = 'DEMOSTRACIÓN · Error cargando ejemplo';
+      dom.puntoFrescura.className = 'punto-frescura frescura-rojo';
+      return;
+    }
+
+    mostrarAvisoDemostracion(false);
+
+    let datos = null;
+    try {
+      const token = params.get('token') || (typeof window.__MESA_TOKEN__ !== 'undefined' ? window.__MESA_TOKEN__ : null) || localStorage.getItem('mesa_token');
+      const headers = { 'Cache-Control': 'no-cache' };
+      if (token) {
+        headers['X-Mesa-Token'] = token;
+      }
+      const resp = await fetch('/api/estado', { headers });
+      if (resp.ok) {
+        datos = await resp.json();
+      }
+    } catch (err) {
+      // Sin conexión con la mesa
     }
 
     if (datos) {
+      origenDatos = 'mesa';
+      ultimoDatoReal = datos;
+      try {
+        sessionStorage.setItem('mesa_ultimo_estado_real', JSON.stringify(datos));
+      } catch (_) {}
       datosActuales = datos;
       renderizarVista(datos);
+    } else if (ultimoDatoReal) {
+      origenDatos = 'desconectado-con-cache';
+      datosActuales = ultimoDatoReal;
+      renderizarVista(ultimoDatoReal);
     } else {
-      dom.textoFrescura.textContent = 'Sin datos disponibles';
-      dom.puntoFrescura.className = 'punto-frescura frescura-rojo';
+      origenDatos = 'desconectado-sin-datos';
+      datosActuales = null;
+      renderizarSinConexion();
     }
   }
 
@@ -267,12 +326,26 @@
   // =========================================================================
   function actualizarFranjaFrescura(datos) {
     if (origenDatos === 'ejemplo') {
-      dom.textoFrescura.textContent = 'Sin conexión con la mesa: datos de ejemplo, no de hoy';
+      dom.textoFrescura.textContent = 'DEMOSTRACIÓN · Datos de ejemplo (?ejemplo=1)';
+      dom.puntoFrescura.className = 'punto-frescura frescura-ambar';
+      dom.alertaTrabajador.hidden = true;
+      return;
+    }
+
+    if (origenDatos === 'desconectado-con-cache') {
+      const timestampStr = datos ? (datos.generado || datos.actualizado) : null;
+      const fechaGen = timestampStr ? new Date(timestampStr) : new Date();
+      const difSegundos = Math.max(0, Math.floor((Date.now() - fechaGen.getTime()) / 1000));
+      const min = Math.floor(difSegundos / 60);
+      const textoAntiguedad = min > 0 ? `${min} min` : `${difSegundos} s`;
+      dom.textoFrescura.textContent = `Sin conexión · último dato hace ${textoAntiguedad}`;
+      dom.textoFrescura.title = timestampStr ? `Último dato real recibido el ${fechaGen.toLocaleString('es-ES')}` : '';
       dom.puntoFrescura.className = 'punto-frescura frescura-rojo';
       dom.alertaTrabajador.hidden = true;
       return;
     }
-    const timestampStr = datos.generado || datos.actualizado;
+
+    const timestampStr = datos ? (datos.generado || datos.actualizado) : null;
     if (!timestampStr) {
       dom.textoFrescura.textContent = 'Datos disponibles (sin fecha)';
       dom.puntoFrescura.className = 'punto-frescura';
@@ -317,6 +390,18 @@
     const agentesList = normalizarListaAgentes(datos);
     const hilosAbiertos = (datos.hilos || []).filter(h => h.estado === 'abierto');
 
+    const params = new URLSearchParams(window.location.search);
+    const abrirProcesosParam = (params.get('abrir-procesos') || '').toLowerCase();
+
+    // Guardar qué tarjetas tenían el desplegable de procesos abierto para preservarlo entre recargas
+    const abiertosPrevios = new Set();
+    dom.cuadriculaAgentes.querySelectorAll('.tarjeta-agente').forEach(t => {
+      const d = t.querySelector('.desplegable-procesos');
+      if (d && d.open) {
+        abiertosPrevios.add(t.id);
+      }
+    });
+
     dom.cuadriculaAgentes.innerHTML = '';
 
     agentesList.forEach(agente => {
@@ -357,11 +442,15 @@
       identidad.appendChild(tituloNombre);
       cabecera.appendChild(identidad);
 
-      if (esLider) {
+      const hilosLiderados = hilosAbiertos.filter(h => (h.lider || '').toLowerCase() === id);
+      if (hilosLiderados.length > 0) {
         const badgeLider = document.createElement('span');
         badgeLider.className = 'insignia-lider';
-        badgeLider.textContent = '👑 Líder';
-        badgeLider.title = 'Este agente es líder en al menos un hilo abierto';
+        // Un solo hilo en la etiqueta: el del encargo en curso, o el primero; el resto se cuenta.
+        const activo = hilosLiderados.find(h => h.id === agente.ejecucion?.hilo) || hilosLiderados[0];
+        const resto = hilosLiderados.length - 1;
+        badgeLider.textContent = `👑 Líder de ${acortarTexto(activo.titulo || activo.id, 24)}${resto > 0 ? ` (+${resto})` : ''}`;
+        badgeLider.title = `Líder en: ${hilosLiderados.map(h => h.titulo || h.id).join(' · ')}`;
         cabecera.appendChild(badgeLider);
       }
 
@@ -409,15 +498,90 @@
         cuerpo.appendChild(ultimo);
       }
 
-      // Alerta visible si la tiene
+      // Alerta visible si la tiene (cortes a propósito no son fallos ni se pintan en rojo)
       if (agente.alerta) {
-        const alertaDiv = document.createElement('div');
-        alertaDiv.className = 'alerta-tarjeta';
         const tipoAlerta = agente.alerta.tipo || 'alerta';
-        const textoAlerta = agente.alerta.texto || JSON.stringify(agente.alerta);
-        alertaDiv.innerHTML = `<span aria-hidden="true">⚠️</span> <span>[${escaparHtml(tipoAlerta)}] ${escaparHtml(textoAlerta)}</span>`;
+        const textoAlerta = agente.alerta.texto || agente.alerta.motivo || JSON.stringify(agente.alerta);
+        const esCortado = esCorteAProposito(tipoAlerta, textoAlerta || agente.motivo);
+        const alertaDiv = document.createElement('div');
+        alertaDiv.className = esCortado ? 'alerta-tarjeta alerta-cortado' : 'alerta-tarjeta';
+        const icono = esCortado ? 'ℹ️' : '⚠️';
+        alertaDiv.innerHTML = `<span aria-hidden="true">${icono}</span> <span>[${escaparHtml(tipoAlerta)}] ${escaparHtml(textoAlerta)}</span>`;
         cuerpo.appendChild(alertaDiv);
       }
+
+      // Desplegable «Procesos» (cerrado por defecto)
+      const desplegable = document.createElement('details');
+      desplegable.className = 'desplegable-procesos';
+      if (abiertosPrevios.has(`tarjeta-${id}`) || abrirProcesosParam === id || abrirProcesosParam === 'todos' || abrirProcesosParam === '1') {
+        desplegable.open = true;
+      }
+
+      const summary = document.createElement('summary');
+      summary.className = 'resumen-procesos';
+      summary.textContent = 'Procesos';
+      desplegable.appendChild(summary);
+
+      const cuerpoProcesos = document.createElement('div');
+      cuerpoProcesos.className = 'cuerpo-procesos';
+
+      // CLI: PID · hora de inicio (hora local, HH:mm:ss) · nombre · línea de comandos recortada.
+      // Si el dato es null: «sin proceso».
+      const filaCli = document.createElement('div');
+      filaCli.className = 'fila-proceso';
+      const labelCli = document.createElement('strong');
+      labelCli.className = 'proceso-etiqueta';
+      labelCli.textContent = 'CLI: ';
+      filaCli.appendChild(labelCli);
+
+      const valorCli = document.createElement('span');
+      valorCli.className = 'proceso-valor';
+      if (agente.cli) {
+        const pidCli = agente.cli.pid != null ? agente.cli.pid : '—';
+        const horaCli = formatearHoraSegundos(agente.cli.inicio);
+        const nomCli = agente.cli.nombre || '—';
+        const lineaCli = acortarTexto(agente.cli.linea, 60) || '—';
+        valorCli.textContent = `PID ${pidCli} · ${horaCli} · ${nomCli} · ${lineaCli}`;
+        if (agente.cli.linea) {
+          valorCli.title = agente.cli.linea;
+        }
+      } else {
+        valorCli.className += ' proceso-sin-proceso';
+        valorCli.textContent = 'sin proceso';
+      }
+      filaCli.appendChild(valorCli);
+      cuerpoProcesos.appendChild(filaCli);
+
+      // Panel (solo codex y agy): PID · hora de inicio · línea de comandos recortada.
+      // Si el dato es null: «sin proceso».
+      if (id !== 'claude') {
+        const filaPanel = document.createElement('div');
+        filaPanel.className = 'fila-proceso';
+        const labelPanel = document.createElement('strong');
+        labelPanel.className = 'proceso-etiqueta';
+        labelPanel.textContent = 'Panel: ';
+        filaPanel.appendChild(labelPanel);
+
+        const valorPanel = document.createElement('span');
+        valorPanel.className = 'proceso-valor';
+        if (agente.panel) {
+          const pidPanel = agente.panel.pid != null ? agente.panel.pid : '—';
+          const horaPanel = formatearHoraSegundos(agente.panel.inicio);
+          const lineaPanel = acortarTexto(agente.panel.linea, 60) || '—';
+          valorPanel.textContent = `PID ${pidPanel} · ${horaPanel} · ${lineaPanel}`;
+          if (agente.panel.linea) {
+            valorPanel.title = agente.panel.linea;
+          }
+        } else {
+          valorPanel.className += ' proceso-sin-proceso';
+          valorPanel.textContent = 'sin proceso';
+        }
+        filaPanel.appendChild(valorPanel);
+        cuerpoProcesos.appendChild(filaPanel);
+      }
+
+      desplegable.appendChild(cuerpoProcesos);
+      cuerpo.appendChild(desplegable);
 
       // Pie de tarjeta con tiempos y latidos
       const pie = document.createElement('div');
@@ -446,12 +610,22 @@
       spanTiempo.title = titleTiempo;
 
       const spanLatido = document.createElement('span');
-      if (agente.latido) {
-        const latidoFecha = new Date(agente.latido);
-        spanLatido.textContent = `Latido: ${tiempoRelativo(latidoFecha)}`;
-        spanLatido.title = `Latido del proceso: ${latidoFecha.toLocaleString('es-ES')}`;
+      if (id === 'claude') {
+        if (agente.cli) {
+          spanLatido.textContent = 'Sesión de claude abierta';
+          spanLatido.title = `Sesión CLI de Claude abierta${agente.cli.pid ? ` (PID ${agente.cli.pid})` : ''}`;
+        } else {
+          spanLatido.textContent = 'Sin sesión abierta';
+          spanLatido.title = 'No hay sesión CLI de Claude abierta';
+        }
       } else {
-        spanLatido.textContent = 'Latido: —';
+        if (agente.latido) {
+          const latidoFecha = new Date(agente.latido);
+          spanLatido.textContent = `Latido: ${tiempoRelativo(latidoFecha)}`;
+          spanLatido.title = `Latido del proceso: ${latidoFecha.toLocaleString('es-ES')}`;
+        } else {
+          spanLatido.textContent = 'Latido: —';
+        }
       }
 
       pie.appendChild(spanTiempo);
@@ -472,84 +646,152 @@
     const agentesList = normalizarListaAgentes(datos);
     const incidencias = [];
 
-    // 1. Incidencias explícitas en el json (si vienen provistas)
-    if (Array.isArray(datos.te_necesito)) {
-      datos.te_necesito.forEach(tn => incidencias.push(tn));
-    }
-
-    // 2. Agentes caídos o esperando a Daniel
+    // 1º Caídos (estado: caido)
     agentesList.forEach(ag => {
       const id = (ag.agente || ag.id || '').toLowerCase();
       const estado = (ag.estado || '').toLowerCase();
       if (estado === 'caido') {
-        const yaExiste = incidencias.some(i => i.agente === id && i.tipo === 'caido');
-        if (!yaExiste) {
-          incidencias.push({
-            id: `caido-${id}`,
-            tipo: 'caido',
-            agente: id,
-            titulo: `Panel de ${capitalize(id)} caído`,
-            paso: `El panel de ${capitalize(id)} no reporta latido reciente o su proceso no está activo.`,
-            hizo: `El supervisor marcó el estado a 'caido' para evitar enviar nuevas tareas no atendidas.`,
-            necesita: `Arrancar o continuar la sesión de ${capitalize(id)}.`,
-            orden: `powershell -ExecutionPolicy Bypass -File .\\herramientas\\trabajador.ps1 -Agente ${id}`
-          });
+        const fechaCaido = ag.desde ? new Date(ag.desde) : (ag.actualizado ? new Date(ag.actualizado) : new Date());
+        let ordenCmd = `.\\mesa.ps1 pendientes -Para ${id}`;
+        if (ag.ejecucion && ag.ejecucion.hilo && ag.ejecucion.n) {
+          ordenCmd = `.\\mesa.ps1 reintentar -Hilo ${ag.ejecucion.hilo} -N ${ag.ejecucion.n} -De claude`;
         }
-      } else if (estado === 'esperando-daniel') {
-        const yaExiste = incidencias.some(i => i.agente === id && i.tipo === 'esperando-daniel');
-        if (!yaExiste) {
-          incidencias.push({
-            id: `esperando-${id}`,
-            tipo: 'esperando-daniel',
-            agente: id,
-            titulo: `${capitalize(id)} requiere intervención de Daniel`,
-            paso: ag.motivo || `El encargo se encuentra escalado tras agotar reintentos o necesita login.`,
-            hizo: `El sistema detuvo el encargo y notificó a la mesa sin reintentar automáticamente.`,
-            necesita: `Revisar el hilo activo y dar respuesta o nueva instrucción.`,
-            orden: ag.hilo
-              ? `powershell -ExecutionPolicy Bypass -File .\\herramientas\\mesa.ps1 leer -Hilo ${ag.hilo}`
-              : `powershell -ExecutionPolicy Bypass -File .\\herramientas\\mesa.ps1 pendientes -Para ${id}`
-          });
-        }
+        incidencias.push({
+          id: `caido-${id}`,
+          grupoPrioridad: 1,
+          tipo: 'caido',
+          fechaObj: fechaCaido,
+          agente: id,
+          titulo: `Panel de ${capitalize(id)} caído`,
+          paso: `El panel de ${capitalize(id)} no reporta latido reciente o su proceso no está activo.`,
+          hizo: `El supervisor marcó el estado a 'caido' para evitar enviar nuevas tareas no atendidas.`,
+          necesita: `Arrancar o continuar la sesión de ${capitalize(id)}.`,
+          orden: ordenCmd
+        });
       }
     });
 
-    // 3. Alertas de seguridad altas sin revisar
-    if (Array.isArray(datos.alertas)) {
-      datos.alertas.filter(a => a.nivel === 'alto' && !a.revisada).forEach(al => {
-        const yaExiste = incidencias.some(i => i.id === al.id);
-        if (!yaExiste) {
-          incidencias.push({
-            id: al.id,
-            tipo: 'alerta-alta',
-            agente: al.agente || 'sistema',
-            titulo: `Alerta alta sin revisar: ${al.motivo || 'Acción peligrosa'}`,
-            paso: `El vigía detectó: ${al.motivo || 'comando no permitido'}.`,
-            hizo: `Se bloqueó la ejecución de la orden sospechosa y se registró la alerta.`,
-            necesita: `Revisar los argumentos y marcar la alerta en la mesa.`,
-            orden: `powershell -ExecutionPolicy Bypass -File .\\herramientas\\mesa.ps1 revisar-alerta -Id ${al.id}`
-          });
-        }
-      });
-    }
+    // 2º Aprobaciones y escalados (esperando-daniel y pendientes con aprobación/escalado)
+    agentesList.forEach(ag => {
+      const id = (ag.agente || ag.id || '').toLowerCase();
+      const estado = (ag.estado || '').toLowerCase();
+      if (estado === 'esperando-daniel') {
+        const fechaEsp = ag.desde ? new Date(ag.desde) : (ag.actualizado ? new Date(ag.actualizado) : new Date());
+        incidencias.push({
+          id: `esperando-${id}`,
+          grupoPrioridad: 2,
+          tipo: 'esperando-daniel',
+          fechaObj: fechaEsp,
+          agente: id,
+          titulo: `${capitalize(id)} requiere intervención de Daniel`,
+          paso: ag.motivo || `El encargo se encuentra escalado tras agotar reintentos o necesita login.`,
+          hizo: `El sistema detuvo el encargo y notificó a la mesa sin reintentar automáticamente.`,
+          necesita: `Revisar el hilo activo y dar respuesta o nueva instrucción.`,
+          orden: ag.hilo
+            ? `.\\mesa.ps1 leer -Hilo ${ag.hilo}`
+            : `.\\mesa.ps1 pendientes -Para ${id}`
+        });
+      }
+    });
 
-    // 4. Aprobaciones / traspasos pendientes
     if (Array.isArray(datos.pendientes)) {
       datos.pendientes.forEach((p, idx) => {
         if (p.texto && (p.texto.includes('ESCALADO') || p.texto.includes('aprobación'))) {
+          const fechaPend = p.fecha ? new Date(p.fecha) : new Date();
+          let ordenPend = `.\\mesa.ps1 pendientes -Para daniel`;
+          if (p.hilo && p.n) {
+            ordenPend = `.\\mesa.ps1 aprobar -Hilo ${p.hilo} -N ${p.n}`;
+          }
           incidencias.push({
             id: `pend-${idx}`,
+            grupoPrioridad: 2,
             tipo: 'aprobacion',
+            fechaObj: fechaPend,
             agente: p.autor || 'sistema',
             titulo: `Aprobación pendiente de ${p.autor || 'agente'}`,
             paso: p.texto,
             hizo: `El agente está a la espera de confirmación.`,
             necesita: `Aprobar o rechazar el avance en el hilo.`,
-            orden: `powershell -ExecutionPolicy Bypass -File .\\herramientas\\mesa.ps1 pendientes -Para daniel`
+            orden: ordenPend
           });
         }
       });
     }
+
+    // 3º Alertas del vigía (nivel alto sin revisar; cortes a propósito NO son fallos ni alertas)
+    if (Array.isArray(datos.alertas)) {
+      const gruposAlertas = new Map();
+      datos.alertas.filter(a => a.nivel === 'alto' && !a.revisada).forEach(al => {
+        const mot = al.motivo || 'Acción que requiere revisión';
+        const tipo = String(al.tipo || '').toLowerCase();
+        if (esCorteAProposito(tipo, mot)) return;
+
+        const ruta = al.archivo || al.ruta || al.valor || '';
+        const clave = `${mot}|${ruta}`;
+        if (!gruposAlertas.has(clave)) {
+          gruposAlertas.set(clave, []);
+        }
+        gruposAlertas.get(clave).push(al);
+      });
+
+      gruposAlertas.forEach((items) => {
+        const primero = items[0];
+        const count = items.length;
+        const itemsOrdenados = [...items].sort((x, y) => new Date(y.hora || 0) - new Date(x.hora || 0));
+        const masReciente = itemsOrdenados[0];
+        const masAntigua = itemsOrdenados[itemsOrdenados.length - 1];
+
+        const titulo = count > 1
+          ? `Alerta alta sin revisar: ${primero.motivo || 'Acción peligrosa'} ×${count}`
+          : `Alerta alta sin revisar: ${primero.motivo || 'Acción peligrosa'}`;
+
+        const horaUltima = masReciente.hora ? horaCorta(new Date(masReciente.hora)) : '—';
+        const detalleVeces = count > 1 ? ` (${count} veces, última a las ${horaUltima})` : '';
+        const ordenCmd = items.map(it => `.\\mesa.ps1 alertas -Revisada ${it.id}`).join('; ');
+
+        incidencias.push({
+          id: `alerta-${primero.id}`,
+          grupoPrioridad: 3,
+          tipo: 'alerta-alta',
+          fechaObj: new Date(masAntigua.hora || Date.now()),
+          agente: primero.agente || 'sistema',
+          titulo: titulo,
+          paso: `El vigía registró: ${primero.motivo || 'comando no permitido'}${detalleVeces}.`,
+          hizo: `La escritura se hizo y solo quedó registrada.`,
+          necesita: `Revisar los argumentos y marcar la alerta en la mesa.`,
+          orden: ordenCmd
+        });
+      });
+    }
+
+    // Incidencias adicionales provistas directamente en datos.te_necesito
+    if (Array.isArray(datos.te_necesito)) {
+      datos.te_necesito.forEach(tn => {
+        if (!incidencias.some(i => i.id === tn.id)) {
+          const tipo = String(tn.tipo || '').toLowerCase();
+          const mot = String(tn.paso || tn.titulo || '').toLowerCase();
+          if (esCorteAProposito(tipo, mot)) return;
+          const grupo = tipo === 'caido' ? 1 : (tipo === 'esperando-daniel' || tipo === 'aprobacion' ? 2 : 3);
+          incidencias.push({
+            ...tn,
+            grupoPrioridad: grupo,
+            fechaObj: tn.fecha ? new Date(tn.fecha) : new Date()
+          });
+        }
+      });
+    }
+
+    // Orden estricto de Te necesito:
+    // 1º caídos, 2º esperando-daniel / aprobaciones, 3º alertas.
+    // Dentro de cada grupo, el más antiguo primero.
+    incidencias.sort((a, b) => {
+      if (a.grupoPrioridad !== b.grupoPrioridad) {
+        return a.grupoPrioridad - b.grupoPrioridad;
+      }
+      const tA = a.fechaObj ? a.fechaObj.getTime() : 0;
+      const tB = b.fechaObj ? b.fechaObj.getTime() : 0;
+      return tA - tB;
+    });
 
     // Actualizar contador y estilos de la sección
     dom.contadorTeNecesito.textContent = incidencias.length;
@@ -662,9 +904,10 @@
       titulo.className = 'hilo-titulo';
       titulo.textContent = hilo.titulo || hilo.id;
 
+      const titCorto = acortarTexto(hilo.titulo || hilo.id, 24);
       const liderBadge = document.createElement('span');
       liderBadge.className = 'hilo-lider-badge';
-      liderBadge.textContent = `Líder: ${capitalize(hilo.lider || '—')}`;
+      liderBadge.textContent = `Líder de ${titCorto}: ${capitalize(hilo.lider || '—')}`;
 
       lineaTitulo.appendChild(titulo);
       lineaTitulo.appendChild(liderBadge);
@@ -725,8 +968,9 @@
   // Modal de Detalle de Hilo
   // =========================================================================
   async function mostrarModalHilo(hilo) {
+    const titCortoModal = acortarTexto(hilo.titulo || hilo.id, 24);
     dom.modalHiloTitulo.textContent = hilo.titulo || hilo.id;
-    dom.modalHiloSubtitulo.textContent = `Líder: ${capitalize(hilo.lider || '—')} · Participantes: ${(hilo.participantes || []).join(', ') || '—'}`;
+    dom.modalHiloSubtitulo.textContent = `Líder de ${titCortoModal}: ${capitalize(hilo.lider || '—')} · Participantes: ${(hilo.participantes || []).join(', ') || '—'}`;
     dom.modalHiloMensajes.innerHTML = '<p>Cargando mensajes...</p>';
     dom.modalHilo.showModal();
 
@@ -860,6 +1104,19 @@
   // =========================================================================
   // Utilidades y Helpers
   // =========================================================================
+  function acortarTexto(txt, maxLen = 24) {
+    if (!txt) return '';
+    const s = String(txt).trim();
+    if (s.length <= maxLen) return s;
+    return s.slice(0, maxLen - 1).trimEnd() + '…';
+  }
+
+  function esCorteAProposito(tipo, motivo) {
+    const t = String(tipo || '').toLowerCase();
+    const m = String(motivo || '').toLowerCase();
+    return t === 'cortado' || m.includes('cortado por') || m.startsWith('cortado');
+  }
+
   function normalizarListaAgentes(datos) {
     if (!datos) return [];
     if (Array.isArray(datos.agentes)) {
@@ -887,6 +1144,13 @@
   function horaCorta(fecha) {
     if (!fecha || isNaN(fecha.getTime())) return '—';
     return fecha.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+
+  function formatearHoraSegundos(fechaIso) {
+    if (!fechaIso) return '—';
+    const fecha = new Date(fechaIso);
+    if (isNaN(fecha.getTime())) return '—';
+    return fecha.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
   }
 
   function formatearNumero(num) {

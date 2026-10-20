@@ -20,8 +20,11 @@
   const cuerpo = el('div', 'mesa-reclamos-cuerpo');
   tarjeta.append(cabecera, cuerpo);
 
-  let plegada = false;
-  try { plegada = localStorage.getItem('mesa-reclamos-plegada') === '1'; } catch {}
+  let plegada = true;
+  try {
+    const guardada = localStorage.getItem('mesa-reclamos-plegada');
+    if (guardada !== null) plegada = guardada === '1';
+  } catch {}
   const aplicarPliegue = () => {
     cuerpo.hidden = plegada;
     cabecera.setAttribute('aria-expanded', String(!plegada));
@@ -94,9 +97,10 @@
     }
   }
 
-  // Va primero: es lo único que espera una acción del líder.
+  // Va primero: es lo único que espera una acción del líder (solo hilos abiertos).
   function pintarBandeja(estado) {
-    const entregas = estado.entregas || [];
+    const hilosAbiertos = new Set((estado.hilos || []).filter((h) => h.estado === 'abierto').map((h) => h.id));
+    const entregas = (estado.entregas || []).filter((e) => e && e.estado !== 'archivada' && (!e.hilo || hilosAbiertos.has(e.hilo)));
     cuerpo.append(el('div', 'mr-sec', `📥 Bandeja de entregas (${entregas.length})`));
     if (!entregas.length) cuerpo.append(el('div', 'mr-vacio', 'Bandeja vacía'));
     const ETIQUETA = { entregada: 'por revisar', aceptada: 'aceptada', devuelta: 'devuelta' };

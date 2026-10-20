@@ -459,6 +459,25 @@ button {
   word-break: break-word;
 }
 
+.badge-demostracion {
+  display: inline-block;
+  font-size: 14px;
+  font-weight: 700;
+  background-color: #f59e0b;
+  color: #451a03;
+  padding: 2px 10px;
+  border-radius: 4px;
+  vertical-align: middle;
+  margin-left: 10px;
+  letter-spacing: 0.05em;
+}
+
+.alerta-tarjeta.alerta-cortado {
+  background-color: var(--fondo-tarjeta);
+  border-color: var(--borde-fuerte);
+  color: var(--texto-principal);
+}
+
 .alerta-tarjeta {
   background-color: var(--color-caido-bg);
   border: 1px solid var(--color-caido-borde);
@@ -1035,3 +1054,77 @@ button {
 .ejecucion-viva { margin-top: 0.6rem; font-size: 14px; }
 .ejecucion-cabecera { font-weight: 600; margin-bottom: 0.3rem; overflow-wrap: anywhere; }
 .ejecucion-salida { max-height: 9rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 0.5rem; border-radius: 6px; background: rgba(0, 0, 0, 0.25); font: 14px/1.4 Consolas, monospace; color: inherit; }
+
+
+/* Desplegable de Procesos en Tarjetas de Agente */
+.desplegable-procesos {
+  margin-top: 6px;
+  border: 1px solid var(--borde-suave);
+  border-radius: 6px;
+  background-color: rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  font-size: 14px;
+}
+
+.resumen-procesos {
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--texto-secundario);
+  cursor: pointer;
+  user-select: none;
+  background-color: rgba(255, 255, 255, 0.03);
+  display: list-item;
+}
+
+.resumen-procesos:hover {
+  color: var(--texto-principal);
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.cuerpo-procesos {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--borde-suave);
+  font-size: 14px;
+  color: var(--texto-secundario);
+  background-color: rgba(0, 0, 0, 0.2);
+}
+
+.fila-proceso {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 14px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.proceso-etiqueta {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--texto-principal);
+}
+
+.proceso-valor {
+  font-size: 14px;
+  font-family: var(--fuente-mono);
+  color: var(--texto-secundario);
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+.proceso-sin-proceso {
+  font-style: italic;
+  color: var(--texto-atenuado);
+}
+
+[data-tema="claro"] .desplegable-procesos {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+[data-tema="claro"] .cuerpo-procesos {
+  background-color: rgba(0, 0, 0, 0.04);
+}
