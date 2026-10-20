@@ -107,6 +107,24 @@ $proximoRelevo = Get-Date
 # La marca de cierre distingue un panel apagado a propósito de uno caído (lo lee el supervisor).
 $marca = Join-Path $Global:Mesa_Raiz "trabajador$sufijo.cerrado"
 Remove-Item -LiteralPath $marca -Force -ErrorAction SilentlyContinue
+# Cerrar el panel con la X (cierre de consola, no Ctrl+C) también es un cierre a propósito: Windows da unos segundos antes de matar el proceso.
+Add-Type -TypeDefinition @'
+using System;
+using System.IO;
+using System.Runtime.InteropServices;
+public static class CierreConsola {
+  public delegate bool Manejador(int tipo);
+  [DllImport("kernel32.dll")] static extern bool SetConsoleCtrlHandler(Manejador manejador, bool agregar);
+  static Manejador guardado;
+  public static string Marca;
+  public static void Instalar(string marca) {
+    Marca = marca;
+    guardado = tipo => { if (tipo == 2 || tipo == 5 || tipo == 6) { File.WriteAllText(Marca, DateTime.Now.ToString("o")); } return false; };
+    SetConsoleCtrlHandler(guardado, true);
+  }
+}
+'@
+[CierreConsola]::Instalar($marca)
 try {
   while ($true) {
     # Nada de lo que falle en una vuelta (JSON corrupto, archivo bloqueado, error del agente) puede cerrar el panel.
