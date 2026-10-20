@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>La oficina de los agentes estrella v4.1</title>
+  <link rel="stylesheet" href="/oficina.css">
+  <script defer src="/arte-v1.js"></script>
+  <script defer src="/oficina.js"></script>
+  <script defer src="/reclamos.js"></script>
+</head>
+<body class="fullscreen-app">
+<header class="topbar">
+  <div class="topbar-left">
+    <a class="brand" href="/" aria-label="Oficina de agentes estrella">
+      <span class="brand-star">✦</span>
+      <span class="brand-text">LA OFICINA <span class="brand-sub">ESTRELLA v4.1</span></span>
+    </a>
+    <span class="motto">Tres mentes. Un equipo. El trabajo, a la vista.</span>
+  </div>
+
+  <nav class="topbar-nav" aria-label="Navegación principal">
+    <button id="btn-toggle-view" class="nav-btn" aria-label="Alternar Planta o Despacho">Ver Despacho ⤢</button>
+    <button id="btn-tv-mode" class="nav-btn" aria-label="Activar Modo TV automático">📺 Modo TV</button>
+    <button id="btn-toggle-timeline" class="nav-btn" aria-label="Ver línea de tiempo del día">⏱ Línea de tiempo</button>
+    <button id="btn-toggle-hud" class="nav-btn" aria-label="Alternar fichas de agentes">📊 Fichas HUD</button>
+    <button id="btn-toggle-threads" class="nav-btn" aria-label="Alternar conversaciones y buzón">💬 Hilos (<span id="pending-count">0</span>)</button>
+    <button id="motion" class="nav-btn" aria-pressed="false" title="Pausar animación">Pausar</button>
+  </nav>
+
+  <div class="topbar-right">
+    <span id="tv-status" class="tv-badge" hidden>📺 TV: Claude (30s)</span>
+    <div class="connection">
+      <span id="connection-dot"></span>
+      <span id="connection">Conectando</span>
+      <time id="clock"></time>
+    </div>
+  </div>
+</header>
+
+<main class="main-viewport">
+  <canvas id="office" aria-label="Oficina pixel art animada de Claude, Codex y agy"></canvas>
+
+  <!-- Overlay para la vista de Despacho -->
+  <div id="despacho-overlay" class="despacho-overlay" hidden>
+    <div class="despacho-topbar">
+      <button id="btn-back-planta" class="despacho-btn despacho-btn-back" title="Volver a la planta general (Tecla Esc)">🏢 Planta (Esc)</button>
+      <div class="despacho-agent-selector">
+        <button class="agent-tab" data-agent="claude">Claude</button>
+        <button class="agent-tab" data-agent="codex">Codex</button>
+        <button class="agent-tab" data-agent="agy">agy</button>
+      </div>
+      <div class="despacho-badge"><span id="despacho-name">DESPACHO</span> · <span id="despacho-model">MODELO</span></div>
+      <button id="btn-motion-despacho" class="despacho-btn" title="Pausar o reanudar animación">Animación</button>
+    </div>
+    <button id="btn-prev-despacho" class="despacho-nav-arrow arrow-left" aria-label="Despacho anterior (tecla ←)" title="Despacho anterior (←)">◀</button>
+    <button id="btn-next-despacho" class="despacho-nav-arrow arrow-right" aria-label="Despacho siguiente (tecla →)" title="Despacho siguiente (→)">▶</button>
+    <div id="despacho-hint" class="despacho-hint">
+      <span>← y → para cambiar despacho · Clic en archivador, pizarra o notas del corcho · Esc vuelve a la planta</span>
+    </div>
+  </div>
+
+  <!-- HUD Plegable: Línea de tiempo del día -->
+  <section id="timeline-drawer" class="hud-panel hud-timeline" hidden aria-label="Línea de tiempo del día">
+    <div class="hud-header">
+      <h3>⏱ LÍNEA DE TIEMPO DEL DÍA (ACTIVIDAD Y HITOS)</h3>
+      <span class="hud-meta">Tramos activos en sesiones y tareas terminadas</span>
+      <button class="hud-close" id="btn-close-timeline" title="Cerrar línea de tiempo">✕</button>
+    </div>
+    <div id="timeline-container" class="timeline-container">
+      <div class="timeline-scale">
+        <span>00:00</span><span>03:00</span><span>06:00</span><span>09:00</span><span>12:00</span><span>15:00</span><span>18:00</span><span>21:00</span><span>24:00</span>
+      </div>
+      <div id="timeline-tracks" class="timeline-tracks">
+        <!-- Generado dinámicamente -->
+      </div>
+    </div>
+  </section>
+
+  <!-- HUD Plegable: Fichas de Agentes en borde inferior -->
+  <section id="hud-agents-panel" class="hud-panel hud-agents" hidden aria-label="Fichas de los agentes">
+    <div class="hud-header">
+      <div class="hud-title-group">
+        <h3>📊 CAPACIDAD, CUOTAS Y MÉTRICAS DE HOY</h3>
+        <span class="key"><i></i> Oficial <i class="estimated"></i> Estimado</span>
+      </div>
+      <div class="hud-actions">
+        <span id="presence">Esperando datos de la mesa</span>
+        <button class="hud-close" id="btn-close-hud" title="Plegar panel de agentes">✕</button>
+      </div>
+    </div>
+    <div id="agents" class="agents-grid">
+      <!-- Fichas de agentes -->
+    </div>
+  </section>
+
+  <!-- HUD Plegable: Conversaciones de la mesa e Hilos -->
+  <aside id="hud-threads-panel" class="hud-panel hud-threads" hidden aria-label="Conversaciones de la mesa">
+    <div class="hud-header">
+      <h3>💬 CONVERSACIONES & BUZÓN</h3>
+      <span id="thread-count">0 hilos</span>
+      <button class="hud-close" id="btn-close-threads" title="Cerrar panel de hilos">✕</button>
+    </div>
+    <div class="threads-layout">
+      <nav id="thread-list" class="thread-list" aria-label="Lista de hilos"></nav>
+      <div class="thread-content">
+        <div id="chat" class="chat-container" aria-live="polite"></div>
+        <div class="pending-section">
+          <h4>PENDIENTES DE APROBACIÓN (<span id="pending-badge">0</span>)</h4>
+          <div id="pending" class="pending-list"></div>
+        </div>
+        <details class="security">
+          <summary>Vigía · registro de alertas</summary>
+          <div id="alert-history"></div>
+        </details>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Modal Interactivo: Nota del corcho abierta con traspaso completo -->
+  <div id="corcho-modal" class="modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-tag" id="modal-tag">📌 TRASPASO</div>
+        <h2 id="modal-title">Detalles del traspaso</h2>
+        <button id="btn-close-modal" class="modal-close" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="modal-meta">
+        <div><strong>De:</strong> <span id="modal-de">—</span></div>
+        <div><strong>Para:</strong> <span id="modal-para">—</span></div>
+        <div><strong>Hora:</strong> <time id="modal-hora">—</time></div>
+        <div><strong>Hilo:</strong> <span id="modal-hilo">—</span></div>
+      </div>
+      <div class="modal-body">
+        <div class="modal-field">
+          <h4>HECHO</h4>
+          <p id="modal-hecho">—</p>
+        </div>
+        <div class="modal-field">
+          <h4>FALTA</h4>
+          <p id="modal-falta">—</p>
+        </div>
+        <div class="modal-field">
+          <h4>ARCHIVOS INVOLUCRADOS</h4>
+          <ul id="modal-archivos" class="modal-file-list"></ul>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-modal-dismiss" class="modal-btn">Entendido (Cerrar)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Interactivo Universal v3 (Pizarra, Monitor, Archivador, Ventana, Decoración, Mascota) -->
+  <div id="interactive-modal" class="modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="interactive-modal-title">
+    <div class="modal-card" id="interactive-modal-card">
+      <div class="modal-header">
+        <div class="modal-tag" id="interactive-modal-tag">✦ INSPECTOR</div>
+        <h2 id="interactive-modal-title">Inspección de objeto</h2>
+        <button id="btn-close-interactive-modal" class="modal-close" aria-label="Cerrar (Esc)">✕</button>
+      </div>
+      <div id="interactive-modal-nav" class="modal-tabs" hidden>
+        <!-- Pestañas para monitor de 3 vistas -->
+      </div>
+      <div id="interactive-modal-meta" class="modal-meta">
+        <!-- Metadatos dinámicos -->
+      </div>
+      <div id="interactive-modal-body" class="modal-body">
+        <!-- Contenido dinámico del objeto inspeccionado -->
+      </div>
+      <div class="modal-footer">
+        <button id="btn-interactive-modal-dismiss" class="modal-btn">Cerrar (Esc)</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="alerts" aria-live="polite"></div>
+  <div id="scene-status" hidden>Solo lectura · Actualiza cada 10 s</div>
+  <div id="updated" hidden>Sin lectura</div>
+</main>
+
+<!-- Barra Inferior: TICKER DE NOTICIAS PIXEL ART -->
+<footer class="bottom-ticker">
+  <div class="ticker-badge">
+    <span class="ticker-pulse"></span>
+    <strong>NOTICIAS EN VIVO ✦</strong>
+  </div>
+  <div class="ticker-viewport">
+    <div id="ticker-content" class="ticker-track">
+      <span>Cargando teletipo de noticias de la oficina...</span>
+    </div>
+  </div>
+  <div class="ticker-status">
+    <span id="ticker-fps">60 FPS</span> · <span>127.0.0.1</span>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,75 @@
+{
+    "topes":  {
+                  "codex":  {
+                                "hora":  4,
+                                "dia":  20
+                            },
+                  "agy":  {
+                              "hora":  6,
+                              "dia":  30
+                          },
+                  "claude":  {
+                                 "hora":  3,
+                                 "dia":  10
+                             }
+              },
+    "autoaprobar":  [
+                        "Claude_nodo",
+                        "claude",
+                        "codex",
+                        "agy",
+                        "antigravity"
+                    ],
+    "modelos":  {
+                    "codex":  [
+                                  "gpt-6.1-sol",
+                                  "gpt-6-astra",
+                                  "gpt-6-sol",
+                                  "gpt-6-luna",
+                                  "gpt-5.6-sol",
+                                  "gpt-5.6-terra",
+                                  "gpt-5.6-luna"
+                              ],
+                    "agy":  [
+                                "gemini-3.8-flash-low",
+                                "gemini-3.8-flash-medium",
+                                "gemini-3.8-flash-high",
+                                "gemini-4-argon-low",
+                                "gemini-4-argon-medium",
+                                "gemini-4-argon-high",
+                                "claude-sonnet-5-5-medium",
+                                "claude-opus-5-5-medium",
+                                "gpt-oss-120b-medium"
+                            ],
+                    "claude":  [
+                                   "fable",
+                                   "opus",
+                                   "sonnet",
+                                   "haiku"
+                               ]
+                },
+    "coste_semilla":  {
+                          "flash":  1.1,
+                          "argon":  12.8,
+                          "claude_gpt":  3
+                      },
+    "cuota_manual":  {
+                         "fecha":  "2026-10-17T14:00",
+                         "claude_semanal_usado_pct":  93,
+                         "agy_flash_semanal_libre_pct":  97.55,
+                         "agy_argon_semanal_libre_pct":  29.58,
+                         "agy_claude_gpt_semanal_libre_pct":  9.12
+                     },
+    "supervisor":  {
+                       "relanzar":  false,
+                       "max_relanzar":  3,
+                       "ventana_min":  10,
+                       "colgado_min":  30,
+                       "reclamo_min":  60,
+                       "latido_seg":  90,
+                       "max_intentos":  3
+                   },
+    "claude_proyectos":  [
+                             "D--Programas-de-uso-libre*"
+                         ]
+}

@@ -1,0 +1,17 @@
+# Estado vivo de la mesa: hilos, reclamos, latidos, cuota, bitácora. Es personal y cambia a cada segundo.
+datos/*
+!datos/mesa.json
+!datos/personajes.json
+!datos/reclamos/
+datos/reclamos/*
+!datos/reclamos/LEEME.md
+
+# Copias de versiones anteriores, historial de encargos y capturas de trabajo.
+anteriores/
+docs/historial/
+
+# Restos de ejecución.
+panel/puerto.txt
+*.log
+*.pid
+*.tmp.*
