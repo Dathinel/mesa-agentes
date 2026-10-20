@@ -731,12 +731,20 @@ function Obtener-EstadoCompleto {
       }
     }
 
+    # El estado de la mesa lo decide el supervisor (docs\estado-contrato.md); aquí solo queda el detalle de la animación.
+    $contrato = Mesa-LeerJson (Join-Path $Global:Mesa_Raiz "agentes\$id.json")
+    $estadoDetalle = $estado
+    $estado = if ($contrato -and $contrato.estado) { [string]$contrato.estado } else { 'libre' }
+    if ($estado -eq 'sin-cuota' -and $contrato.hasta) { $vuelve = $contrato.hasta }
+
     $agentes+=@{
+      estado_detalle=$estadoDetalle; motivo=if ($contrato) { $contrato.motivo } else { 'sin datos del supervisor' }; desde=if ($contrato) { $contrato.desde } else { $null }
+      alerta=if ($contrato) { $contrato.alerta } else { $null }
       despacho=$despachoObj
       calibracion=$calibracionObj
       operacion_animada=$operacionAnimada; pasos_plan=$pasos; carpetas=$carpetas; archivados=$archivados
       id=$id; nombre=if ($id -eq 'agy') { 'agy' } else { (Get-Culture).TextInfo.ToTitleCase($id) }
-      modelo=$modelo; modelo_fuente=$origen; esfuerzo=$esfuerzo; personaje=$personaje; estado=$estado; online=($estado -notin @('apagado','descansando'))
+      modelo=$modelo; modelo_fuente=$origen; esfuerzo=$esfuerzo; personaje=$personaje; estado=$estado; online=($estado -in @('trabajando','libre','esperando-daniel'))
       plan=if ($tareas[$id]) { $tareas[$id].texto } else { 'Sin encargo en ejecución' }; ultima=$ultima; pasantes=[Math]::Min(4,$pasantes); pasantes_lista=$listaPasantes; hilo_actual=$hiloActual; vuelve=$vuelve
       archivos=$ultimos6
       ultimos_archivos=$ultimos6

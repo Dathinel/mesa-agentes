@@ -8,6 +8,7 @@ param(
   [switch]$SinAvisos
 )
 . "$PSScriptRoot\comun.ps1"
+. "$PSScriptRoot\vigia.ps1" -Biblioteca
 if ($env:MESA_SIN_AVISOS -eq '1') { $SinAvisos = [switch]$true }
 
 $cfgSup = (Mesa-LeerJson (Mesa-ConfigPath)).supervisor
@@ -58,6 +59,39 @@ function Informar($clave, $memoria, $hilo, $para, $paso, $hice, $necesito) {
 
 function Vivo($id) { $id -and (Get-Process -Id $id -ErrorAction SilentlyContinue) }
 
+# Traduce el estado interno de la vuelta a los seis del contrato (docs\estado-contrato.md).
+function Contrato-Estado($a, $e, $escalado, $ultimo, [datetime]$ahora, $previo) {
+  $c = [ordered]@{ agente = $a; estado = 'libre'; motivo = 'listo para encargos'; desde = $null; hasta = $e.hasta; hilo = $e.hilo; n = $e.n; latido = $e.latido; alerta = $null; actualizado = (Mesa-IsoNow) }
+  if ($e.motivo) { $c.motivo = $e.motivo }
+  if ($e.estado -eq 'caido' -or $e.estado -eq 'apagado') { $c.estado = $e.estado }
+  elseif ($escalado -or $e.estado -eq 'necesita-login') {
+    $c.estado = 'esperando-daniel'
+    $c.motivo = if ($escalado) { "encargo #$($escalado.n) escalado: lo revisa Daniel" } else { 'la sesión del CLI caducó: inicia sesión en su consola' }
+  }
+  elseif ($e.estado -eq 'sin-cuota') { $c.estado = 'sin-cuota' }
+  elseif ($e.estado -in @('trabajando', 'colgado')) { $c.estado = 'trabajando' }
+  if ($e.estado -eq 'colgado') { $c.alerta = [ordered]@{ tipo = 'colgado'; texto = $e.motivo } }
+  if ($c.estado -eq 'libre' -and $ultimo -and $ultimo.m.estado -in @('huerfano', 'fallo') -and $ultimo.fin -gt $ahora.AddHours(-24)) {
+    $huerfano = $ultimo.m.estado -eq 'huerfano'
+    $c.alerta = [ordered]@{ tipo = if ($huerfano) { 'huerfano' } else { 'fallido' }; texto = "encargo #$($ultimo.m.n) de $($ultimo.hilo): $(if ($huerfano) { 'su proceso ya no existe' } else { 'terminó con error' }). Relánzalo con mesa.ps1 reintentar" }
+  }
+  $c.desde = if ($previo -and $previo.estado -eq $c.estado -and $previo.desde) { $previo.desde } else { Mesa-IsoNow }
+  $c
+}
+
+# La oficina la vigila el supervisor: si su servidor no responde, lo vuelve a abrir (2 min entre intentos como mucho).
+$script:ultimoServidor = [datetime]::MinValue
+function Asegurar-Servidor {
+  if ($env:MESA_RAIZ_PRUEBA) { return }
+  $pf =Join-Path $Global:Mesa_Raiz 'puerto.txt'
+  $puerto = if (Test-Path -LiteralPath $pf) { (Get-Content -LiteralPath $pf -Raw).Trim() } else { '8790' }
+  try { $r = Invoke-WebRequest "http://127.0.0.1:$puerto/api/ping" -UseBasicParsing -TimeoutSec 2; if ($r.Content -match '"ok"') { return } } catch { }
+  if (((Get-Date) - $script:ultimoServidor).TotalMinutes -lt 2) { return }
+  $script:ultimoServidor = Get-Date
+  Start-Process powershell -WindowStyle Hidden -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$(Join-Path $Global:Mesa_Base 'panel\servidor.ps1')`""
+  Bitacora 'La oficina no respondía: la volví a abrir.'
+}
+
 function Rotar($nombre, $maxMB) {
   $f = Join-Path $Global:Mesa_Raiz $nombre
   if (-not (Test-Path -LiteralPath $f) -or (Get-Item -LiteralPath $f).Length -lt $maxMB * 1MB) { return }
@@ -82,14 +116,17 @@ function Vuelta {
   $estado = @{}
   foreach ($a in $Global:Mesa_Agentes) { $estado[$a] = [ordered]@{ agente = $a; estado = 'libre'; motivo = ''; hilo = $null; n = $null; latido = $null; actualizado = (Mesa-IsoNow); hasta = $null } }
 
+  try { Invocar-Vigia } catch { Mesa-AnexarLinea (Join-Path $Global:Mesa_Raiz 'errores-paneles.log') ("{0}`tvigia`t{1}" -f (Mesa-IsoNow), $_.Exception.Message) }
+
   # 1. Encargos en curso: vivos, colgados o huérfanos. Y la última causa de fallo de cada agente (cuota, login).
-  $ultimoFin = @{}
+  $ultimoFin = @{}; $escalados = @{}
   foreach ($d in @(Get-ChildItem -LiteralPath $Global:Mesa_Hilos -Directory -ErrorAction SilentlyContinue)) {
     $lider = (Mesa-LeerMensaje (Join-Path $d.FullName 'hilo.json')).lider
     foreach ($f in @(Get-ChildItem -LiteralPath $d.FullName -Filter '*-*.json' -ErrorAction SilentlyContinue)) {
       $m = Mesa-LeerMensaje $f.FullName
       if (-not $m -or -not $m.llamada -or -not $m.herramienta -or $m.herramienta -notin $Global:Mesa_Agentes) { continue }
       $a = $m.herramienta
+      if ($m.tipo -eq 'encargo' -and $m.estado -eq 'escalado') { $escalados[$a] = $m }
       if ($m.tipo -eq 'encargo' -and $m.estado -eq 'ejecutando') {
         $log = $m.llamada.log
         $logEdad = if ($log -and (Test-Path -LiteralPath $log)) { ($ahora - (Get-Item -LiteralPath $log).LastWriteTime).TotalMinutes } else { ($ahora - [datetime]::Parse($m.llamada.inicio)).TotalMinutes }
@@ -146,7 +183,13 @@ function Vuelta {
     $latFile = Join-Path $Global:Mesa_Raiz "trabajador-$a.latido"
     if (Test-Path -LiteralPath $latFile) { $lt = (Get-Item -LiteralPath $latFile).LastWriteTime; if ($lt -gt $ult) { $ult = $lt } }
     if ($ult -gt [datetime]::MinValue) { $estado[$a].latido = $ult.ToString('yyyy-MM-ddTHH:mm:sszzz') }
-    $panelCaido = if ($a -eq 'claude') { -not (Get-Process -Name claude -ErrorAction SilentlyContinue) }
+    # El panel salió limpio (trabajador.ps1 deja la marca al cerrar): no es una caída.
+    $marca = Join-Path $Global:Mesa_Raiz "trabajador-$a.cerrado"
+    if ((Test-Path -LiteralPath $marca) -and (-not (Test-Path -LiteralPath $latFile) -or (Get-Item -LiteralPath $marca).LastWriteTime -gt (Get-Item -LiteralPath $latFile).LastWriteTime)) {
+      if ($estado[$a].estado -eq 'libre') { $estado[$a].estado = 'apagado'; $estado[$a].motivo = 'panel cerrado' }
+      continue
+    }
+    $panelCaido =if ($a -eq 'claude') { -not (Get-Process -Name claude -ErrorAction SilentlyContinue) }
                   else { (Test-Path -LiteralPath $latFile) -and ($ahora - (Get-Item -LiteralPath $latFile).LastWriteTime).TotalSeconds -gt $latidoSeg }
     if ($panelCaido -and $estado[$a].estado -eq 'libre' -and -not $script:tolerante) {
       $estado[$a].estado = 'caido'; $estado[$a].motivo = if ($a -eq 'claude') { 'no hay ningún proceso de claude' } else { 'su panel no da latido' }
@@ -187,9 +230,11 @@ function Vuelta {
 
   foreach ($a in $Global:Mesa_Agentes) {
     $previo = Mesa-LeerMensaje (Join-Path $dirAgentes "$a.json")
-    if ($previo -and $previo.estado -ne $estado[$a].estado) { Bitacora "$a pasa de $($previo.estado) a $($estado[$a].estado)$(if ($estado[$a].motivo) { ": $($estado[$a].motivo)" })." }
-    Mesa-EscribirJson (Join-Path $dirAgentes "$a.json") $estado[$a]
+    $c = Contrato-Estado $a $estado[$a] $escalados[$a] $ultimoFin[$a] $ahora $previo
+    if ($previo -and $previo.estado -ne $c.estado) { Bitacora "$a pasa de $($previo.estado) a $($c.estado)$(if ($c.motivo) { ": $($c.motivo)" })." }
+    Mesa-EscribirJson (Join-Path $dirAgentes "$a.json") $c
   }
+  try { Asegurar-Servidor } catch { }
   # Los avisos de más de 7 días se olvidan: la memoria no crece sin límite.
   foreach ($p in @($memoria.avisados.PSObject.Properties)) { if (($ahora - [datetime]::Parse($p.Value)).TotalDays -gt 7) { $memoria.avisados.PSObject.Properties.Remove($p.Name) } }
   Mesa-EscribirJson $rutaMemoria $memoria

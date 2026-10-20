@@ -104,41 +104,48 @@ Write-Host $aviso -ForegroundColor DarkGray
 if ($sesion) { Write-Host "Conversación que continúa: $sesion" -ForegroundColor DarkGray }
 $proxima = Get-Date
 $proximoRelevo = Get-Date
-while ($true) {
-  # Nada de lo que falle en una vuelta (JSON corrupto, archivo bloqueado, error del agente) puede cerrar el panel.
-  try {
-    try { [IO.File]::WriteAllText($latido, (Mesa-IsoNow)) } catch {}
-    if ($Agente -and [Console]::KeyAvailable) {
-      $t = Read-Host "Tú → $Agente"
-      if ($t.Trim()) {
-        Write-Host ("`n━━ {0} · {2} → {1}" -f (Get-Date -Format 'HH:mm'), $Agente, $Global:Mesa_Humano) -ForegroundColor Magenta
-        Charlar $t
-        Write-Host "━━ fin · esperando" -ForegroundColor DarkGray
+# La marca de cierre distingue un panel apagado a propósito de uno caído (lo lee el supervisor).
+$marca = Join-Path $Global:Mesa_Raiz "trabajador$sufijo.cerrado"
+Remove-Item -LiteralPath $marca -Force -ErrorAction SilentlyContinue
+try {
+  while ($true) {
+    # Nada de lo que falle en una vuelta (JSON corrupto, archivo bloqueado, error del agente) puede cerrar el panel.
+    try {
+      try { [IO.File]::WriteAllText($latido, (Mesa-IsoNow)) } catch {}
+      if ($Agente -and [Console]::KeyAvailable) {
+        $t = Read-Host "Tú → $Agente"
+        if ($t.Trim()) {
+          Write-Host ("`n━━ {0} · {2} → {1}" -f (Get-Date -Format 'HH:mm'), $Agente, $Global:Mesa_Humano) -ForegroundColor Magenta
+          Charlar $t
+          Write-Host "━━ fin · esperando" -ForegroundColor DarkGray
+        }
       }
-    }
-    if ($Agente -and (Get-Date) -ge $proximoRelevo) {
-      $proximoRelevo = (Get-Date).AddMinutes(1)
-      try { Vigilar-Lideres } catch { Write-Host "Relevo: $($_.Exception.Message)" -ForegroundColor DarkGray }
-      # Quién vigila al supervisor: cada panel, una vez por caída.
-      $latSup = Join-Path $Global:Mesa_Raiz 'agentes\supervisor.latido'
-      $supParado = (Test-Path -LiteralPath $latSup) -and ((Get-Date) - (Get-Item -LiteralPath $latSup).LastWriteTime).TotalMinutes -gt 3
-      if ($supParado -and -not $script:avisoSupervisor) { Write-Host ("`n━━ {0} · El supervisor no da señales desde hace más de 3 min: vuelve a abrir la mesa con Cuadrilla.bat." -f (Get-Date -Format 'HH:mm')) -ForegroundColor Red }
-      $script:avisoSupervisor = $supParado
-    }
-    if ((Get-Date) -ge $proxima) {
-      $proxima = (Get-Date).AddSeconds($Intervalo)
-      $sig = Siguiente-EnCola
-      if ($sig) {
-        Write-Host ("`n━━ {0} · {1} ({2}) · {3} #{4}" -f (Get-Date -Format 'HH:mm'), $sig.para, $sig.modelo, $sig.hilo, $sig.n) -ForegroundColor Yellow
-        Write-Host "   $($sig.texto)" -ForegroundColor DarkYellow
-        Correr $sig.hilo $sig.n $null
-        Write-Host "━━ fin #$($sig.n) · esperando" -ForegroundColor DarkGray
+      if ($Agente -and (Get-Date) -ge $proximoRelevo) {
+        $proximoRelevo = (Get-Date).AddMinutes(1)
+        try { Vigilar-Lideres } catch { Write-Host "Relevo: $($_.Exception.Message)" -ForegroundColor DarkGray }
+        # Quién vigila al supervisor: cada panel, una vez por caída.
+        $latSup = Join-Path $Global:Mesa_Raiz 'agentes\supervisor.latido'
+        $supParado = (Test-Path -LiteralPath $latSup) -and ((Get-Date) - (Get-Item -LiteralPath $latSup).LastWriteTime).TotalMinutes -gt 3
+        if ($supParado -and -not $script:avisoSupervisor) { Write-Host ("`n━━ {0} · El supervisor no da señales desde hace más de 3 min: vuelve a abrir la mesa con Cuadrilla.bat." -f (Get-Date -Format 'HH:mm')) -ForegroundColor Red }
+        $script:avisoSupervisor = $supParado
       }
+      if ((Get-Date) -ge $proxima) {
+        $proxima = (Get-Date).AddSeconds($Intervalo)
+        $sig = Siguiente-EnCola
+        if ($sig) {
+          Write-Host ("`n━━ {0} · {1} ({2}) · {3} #{4}" -f (Get-Date -Format 'HH:mm'), $sig.para, $sig.modelo, $sig.hilo, $sig.n) -ForegroundColor Yellow
+          Write-Host "   $($sig.texto)" -ForegroundColor DarkYellow
+          Correr $sig.hilo $sig.n $null
+          Write-Host "━━ fin #$($sig.n) · esperando" -ForegroundColor DarkGray
+        }
+      }
+    } catch {
+      Write-Host ("`n━━ {0} · error, el panel sigue: {1}" -f (Get-Date -Format 'HH:mm'), $_.Exception.Message) -ForegroundColor Red
+      try { Mesa-AnexarLinea (Join-Path $Global:Mesa_Raiz 'errores-paneles.log') ("{0}`t{1}`t{2}" -f (Mesa-IsoNow), $Agente, $_.Exception.Message) } catch {}
+      Start-Sleep -Seconds 2
     }
-  } catch {
-    Write-Host ("`n━━ {0} · error, el panel sigue: {1}" -f (Get-Date -Format 'HH:mm'), $_.Exception.Message) -ForegroundColor Red
-    try { Mesa-AnexarLinea (Join-Path $Global:Mesa_Raiz 'errores-paneles.log') ("{0}`t{1}`t{2}" -f (Mesa-IsoNow), $Agente, $_.Exception.Message) } catch {}
-    Start-Sleep -Seconds 2
+    Start-Sleep -Milliseconds 200
   }
-  Start-Sleep -Milliseconds 200
+} finally {
+  [IO.File]::WriteAllText($marca, (Mesa-IsoNow))
 }

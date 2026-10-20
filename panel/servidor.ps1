@@ -36,20 +36,29 @@ $trabajador = {
   $datosDir = Join-Path $mesaBase 'datos'; $hilosDir = Join-Path $datosDir 'hilos'
   . (Join-Path $mesaBase 'herramientas\comun.ps1')
   . (Join-Path $panelDir 'estado.ps1')
-  . (Join-Path $mesaBase 'herramientas\vigia.ps1') -Biblioteca
   $ultimaCuota = [datetime]::MinValue
   while ($true) {
-    try { Invocar-Vigia } catch { }
     if (((Get-Date) - $ultimaCuota).TotalSeconds -ge 60) {
       try { & (Join-Path $mesaBase 'herramientas\cuota.ps1') | Out-Null } catch { }
       $ultimaCuota = Get-Date
     }
     try {
-      $json = (Mesa-SanearObjeto (Obtener-EstadoCompleto)) | ConvertTo-Json -Depth 16 -Compress
+      $estado = Obtener-EstadoCompleto
+      $estado.generado = Mesa-IsoNow
+      $estado.error_trabajador = $null
+      $json = (Mesa-SanearObjeto $estado) | ConvertTo-Json -Depth 16 -Compress
       $tmp = "$cacheArchivo.tmp"
       [IO.File]::WriteAllText($tmp, $json, (New-Object Text.UTF8Encoding($false)))
       Move-Item -LiteralPath $tmp -Destination $cacheArchivo -Force
-    } catch { }
+    } catch {
+      # Se queda la caché anterior, con su hora de cálculo: la página la muestra como dato viejo y dice por qué.
+      try {
+        $viejo = [IO.File]::ReadAllText($cacheArchivo, [Text.Encoding]::UTF8) | ConvertFrom-Json
+        $viejo | Add-Member error_trabajador "$(Mesa-IsoNow): $($_.Exception.Message)" -Force
+        [IO.File]::WriteAllText("$cacheArchivo.tmp", ($viejo | ConvertTo-Json -Depth 16 -Compress), (New-Object Text.UTF8Encoding($false)))
+        Move-Item -LiteralPath "$cacheArchivo.tmp" -Destination $cacheArchivo -Force
+      } catch { }
+    }
     Start-Sleep -Seconds 3
   }
 }
@@ -86,7 +95,6 @@ try {
   while ($true) {
     if (((Get-Date) - $script:ultimaRevision).TotalSeconds -ge 15) { Asegurar-Trabajador; $script:ultimaRevision = Get-Date }
     if (!$listener.Pending()) {
-      if (((Get-Date)-$ultimaVisita).TotalMinutes -ge 30) { break }
       Start-Sleep -Milliseconds 100; continue
     }
     $client=$listener.AcceptTcpClient(); $client.ReceiveTimeout=5000; $client.SendTimeout=10000

@@ -91,7 +91,7 @@ do {
       $txtWt = if ($susWt.Count) { " | wt $($susWt.Count)$(if ($topeWt) { "/$topeWt" })$(if (@($susWt | Where-Object { $_.sin_confirmar -gt 0 }).Count) { ' sucio' })" } else { '' }
       $texto = '{0,-6} | {1,-16} | {2,-14} | {3,-18} | {4,-12} | cuota {5}{6}' -f $agente, $rol, $estado, $nombreTarea, (Antiguedad $latido), $libre, $txtWt
       # El nombre conserva el color del agente incluso en estados de alarma.
-      if ($estado -in @('colgado', 'caido', 'sin-cuota', 'necesita-login')) {
+      if ($estado -in @('colgado', 'caido', 'sin-cuota', 'esperando-daniel')) {
         $texto = Recortar $texto
         [void]$vista.AppendLine("$esc[$($colores[$color])m$($texto.Substring(0,6))$esc[91m$($texto.Substring(6))$esc[0m")
       } else { Linea $texto $color }

@@ -1000,6 +1000,13 @@ function closeInteractiveModal() {
 // =========================================================================
 // CICLO DE VIDA Y REFRESCO DE DATOS
 // =========================================================================
+const ANIMACION_DE_ESTADO = { libre: 'esperando', 'esperando-daniel': 'esperando', 'sin-cuota': 'descansando', caido: 'apagado', apagado: 'apagado' };
+const ANIMACIONES_DE_TRABAJO = ['escribiendo', 'leyendo', 'compilando', 'probando', 'pensando'];
+function estadoOficina(a) {
+  if (a.estado === 'trabajando') return ANIMACIONES_DE_TRABAJO.includes(a.estado_detalle) ? a.estado_detalle : 'pensando';
+  return ANIMACION_DE_ESTADO[a.estado] || 'esperando';
+}
+
 async function refresh() {
   try {
     if (!tokenMesa) tokenMesa = window.__MESA_TOKEN__ || document.querySelector('meta[name="mesa-token"]')?.content || '';
@@ -1017,6 +1024,8 @@ async function refresh() {
     const etag = r.headers.get('ETag');
     if (etag) lastEtag = etag;
     const next = await r.json();
+    // El estado lo manda la mesa (docs/estado-contrato.md); aquí solo se traduce a las animaciones de la oficina.
+    for (const a of next.agentes || []) { a.estado_mesa = a.estado; a.estado = estadoOficina(a); }
     const prev = data;
     if (demoModo) ajustarDemo(next);
     data = next;
