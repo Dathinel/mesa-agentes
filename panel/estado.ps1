@@ -82,6 +82,19 @@ function Estado-MetaCola([string]$Ruta, [long]$Bytes = 262144) {
   @{ modelo = $modelo; acciones = $acciones }
 }
 
+# Últimos 1500 caracteres del log de un encargo en curso: lo que el agente va diciendo mientras trabaja.
+function Estado-SalidaViva([string]$Ruta) {
+  if (!$Ruta -or !(Test-Path -LiteralPath $Ruta)) { return '' }
+  $fs = [IO.File]::Open($Ruta, 'Open', 'Read', 'ReadWrite')
+  try {
+    $ini = [Math]::Max(0L, $fs.Length - 6000L); [void]$fs.Seek($ini, 'Begin')
+    $buf = New-Object byte[] ($fs.Length - $ini); [void]$fs.Read($buf, 0, $buf.Length)
+    $t = Mesa-Ocultar ([Text.Encoding]::UTF8.GetString($buf))
+  } finally { $fs.Dispose() }
+  if ($t.Length -gt 1500) { $t = $t.Substring($t.Length - 1500) }
+  $t
+}
+
 function Estado-Recorte([string]$s, [int]$max = 60) {
   $s = (($s -split "`r?`n") | Where-Object { $_.Trim() } | Select-Object -First 1)
   if (!$s) { return $null }
@@ -747,7 +760,12 @@ function Obtener-EstadoCompleto {
       operacion_animada=$operacionAnimada; pasos_plan=$pasos; carpetas=$carpetas; archivados=$archivados
       id=$id; nombre=if ($id -eq 'agy') { 'agy' } else { (Get-Culture).TextInfo.ToTitleCase($id) }
       modelo=$modelo; modelo_fuente=$origen; esfuerzo=$esfuerzo; personaje=$personaje; estado=$estado; online=($estado -in @('trabajando','libre','esperando-daniel'))
-      plan=if ($tareas[$id]) { $tareas[$id].texto } else { 'Sin encargo en ejecución' }; ultima=$ultima; pasantes=[Math]::Min(4,$pasantes); pasantes_lista=$listaPasantes; hilo_actual=$hiloActual; vuelve=$vuelve
+      plan=if ($tareas[$id]) { $tareas[$id].texto } else { 'Sin encargo en ejecución' }
+      ejecucion=if ($tareas[$id]) { $t=$tareas[$id]; [ordered]@{ hilo=$t.hilo; n=$t.n; inicio=$t.llamada.inicio; corre_en=if ($t.dir) { $t.dir } else { $Global:Mesa_DefaultDir }; salida=(Estado-SalidaViva $t.llamada.log) } } else { $null }
+      resultado=$(
+        $fin = @($hilos | ForEach-Object { $_.mensajes } | Where-Object { $_.tipo -eq 'encargo' -and $_.herramienta -eq $id -and $_.estado -in @('hecho', 'fallo') -and $_.llamada.fin } | Sort-Object { [DateTimeOffset]::Parse($_.llamada.fin) } -Descending | Select-Object -First 1)
+        if ($fin.Count) { [ordered]@{ hilo=$fin[0].hilo; n=$fin[0].n; estado=$fin[0].estado; fin=$fin[0].llamada.fin } } else { $null })
+      ultima=$ultima; pasantes=[Math]::Min(4,$pasantes); pasantes_lista=$listaPasantes; hilo_actual=$hiloActual; vuelve=$vuelve
       archivos=$ultimos6
       ultimos_archivos=$ultimos6
       tiempo_trabajado_hoy=$tiempoHoy
