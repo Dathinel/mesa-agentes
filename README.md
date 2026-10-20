@@ -9,7 +9,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/licencia-MIT-E8833A?style=flat-square&labelColor=1D1D1D" alt="Licencia MIT"></a>
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-E8833A?style=flat-square&labelColor=1D1D1D" alt="Windows 10 y 11">
   <img src="https://img.shields.io/badge/PowerShell-5.1-E8833A?style=flat-square&labelColor=1D1D1D&logo=powershell&logoColor=white" alt="PowerShell 5.1">
-  <img src="https://img.shields.io/badge/pruebas_de_caos-12%2F12-E8833A?style=flat-square&labelColor=1D1D1D" alt="Pruebas de caos 12 de 12">
+  <img src="https://img.shields.io/badge/pruebas_de_caos-15%2F15-E8833A?style=flat-square&labelColor=1D1D1D" alt="Pruebas de caos 15 de 15">
 </p>
 
 <p align="center">
@@ -53,7 +53,7 @@ El protocolo completo que siguen los agentes está en [`CLAUDE.md`](CLAUDE.md) (
 
 - Windows 10 u 11 con Windows PowerShell 5.1 (viene con Windows) y Windows Terminal.
 - Los CLI oficiales con la sesión iniciada: `claude`, `codex` y `agy`. Ninguno es obligatorio: sin uno, su panel no trabaja y el resto sigue.
-- La mesa vive junto a la carpeta donde trabajan los agentes (por defecto, la carpeta que la contiene; otra con `MESA_TRABAJO`). Los ámbitos que ningún agente debe tocar van, uno por expresión regular, en `datos\excluidos.txt`, que no se sube.
+- La mesa vive junto a la carpeta donde trabajan los agentes (por defecto, la carpeta que la contiene; otra con `MESA_TRABAJO`). Los ámbitos que ningún agente debe tocar van en `datos\excluidos.txt`, una expresión regular por línea,, que no se sube.
 
 ## Pruebas
 
@@ -65,7 +65,7 @@ Corre todo en copias aisladas en `%TEMP%` (`MESA_RAIZ_PRUEBA`), con agentes simu
 
 | Prueba | Qué comprueba | Resultado |
 |---|---|---|
-| `pruebas\caos.ps1` | agente muerto a mitad y su reintento con puntos de control, escalado tras 3 intentos, JSON dañado, panel que sobrevive a un JSON dañado, pestaña cerrada, cuota agotada, sesión caducada, encargo colgado, reclamo caducado, reinicio seguro y relevo del líder | 12/12 |
+| `pruebas\caos.ps1` | agente muerto a mitad y su reintento con puntos de control, escalado tras 3 intentos, JSON dañado, panel que sobrevive a un JSON dañado, pestaña cerrada, cuota agotada, sesión caducada, encargo colgado, reclamo caducado, reinicio seguro, relevo del líder, cortar sin tocar otro encargo, notas de desconocidos y exclusiones | 15/15 |
 | `pruebas\probar-relevo.ps1` | relevo del líder: cuándo sí y cuándo no | 4/4 |
 | `pruebas\probar-vigia-ambito.ps1` | ámbito de escritura del vigía | 15/15 |
 | `pruebas\probar-oficina.ps1` | reglas del vigía y reparto del coste de cuota | todas |

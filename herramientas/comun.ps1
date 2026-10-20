@@ -16,7 +16,10 @@ $Global:Mesa_Agentes = @('claude', 'codex', 'agy')
 # Ámbitos que ningún agente toca ni se muestran: una expresión regular en datos\excluidos.txt, que no se versiona.
 function Mesa-Excluidos {
   $f = Join-Path $Global:Mesa_Raiz 'excluidos.txt'
-  if (Test-Path -LiteralPath $f) { $x = ([IO.File]::ReadAllText($f)).Trim(); if ($x) { return "(?i)$x" } }
+  if (Test-Path -LiteralPath $f) {
+    $lineas = @([IO.File]::ReadAllLines($f) | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') })
+    if ($lineas.Count) { $x = '(?i)' + (($lineas | ForEach-Object { "(?:$_)" }) -join '|'); [void][regex]::new($x); return $x }
+  }
   '(?!)'
 }
 

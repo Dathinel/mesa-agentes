@@ -51,4 +51,4 @@ Daniel prueba la coordinación en cada mensaje, aunque no lo diga y aunque te es
 - Español, directo, con evidencia (archivo:línea, cifras).
 
 ## Estado
-- 19-oct: repositorio `Dathinel/mesa-agentes` (privado, MIT). Supervisor, tablero, `Mesa.bat`, pruebas de caos 12/12 (`Probar.bat`). Diagnóstico y siguiente paso en `docs\mesa-diagnostico.md` (lo próximo: un worktree por agente).
+- 19-oct: repositorio `Dathinel/mesa-agentes` (privado, MIT). Supervisor, tablero, `Mesa.bat`, pruebas de caos 15/15 (`Probar.bat`). Diagnóstico y siguiente paso en `docs\mesa-diagnostico.md` (lo próximo: un worktree por agente).

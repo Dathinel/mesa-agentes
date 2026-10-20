@@ -7,7 +7,7 @@ setlocal EnableExtensions
 chcp 65001 >nul
 title Mesa de agentes - pruebas
 set "P=%~dp0pruebas"
-set "PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File
+set "PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
 set FALLOS=0
 for %%T in (caos probar-relevo probar-vigia-ambito probar-oficina) do (
   if /i "%~1"=="" call :una %%T
@@ -21,6 +21,6 @@ exit /b %FALLOS%
 :una
 echo.
 echo === %1 ===
-%PS% "%P%\%1.ps1"
+"%PS%" -NoProfile -ExecutionPolicy Bypass -File "%P%\%1.ps1"
 if errorlevel 1 set /a FALLOS+=1
 exit /b 0

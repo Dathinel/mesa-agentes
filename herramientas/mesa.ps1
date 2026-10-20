@@ -151,13 +151,17 @@ switch ($Comando) {
     Exigir-Lider (Mesa-LeerJson (Join-Path $carpeta 'hilo.json')) $De
     $m = Mesa-LeerJson (Buscar-ArchivoMensaje $carpeta $N).FullName
     if ($m.estado -ne 'ejecutando' -or -not $m.llamada.pid) { throw "#$N no está en curso con un proceso conocido." }
+    # Solo si ese proceso sigue con este mismo intento: un panel que ya pasó al encargo siguiente no se toca.
+    $enCurso = Mesa-LeerMensaje (Join-Path $Global:Mesa_Raiz "agentes\en-curso-$($m.llamada.pid).json")
+    if (-not $enCurso -or $enCurso.hilo -ne $Hilo -or [int]$enCurso.n -ne $N -or $enCurso.intento -ne $m.llamada.intento) { throw "El proceso $($m.llamada.pid) ya no ejecuta #$N`: no se corta nada. Si quedó huérfano, usa reintentar." }
     # Se corta el CLI (hijo del proceso que lo lanzó), no el panel: ejecutar.ps1 lo registra como fallo y el panel sigue.
     $hijos = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($m.llamada.pid)" | Where-Object { $_.Name -notin @('powershell.exe', 'pwsh.exe', 'conhost.exe') })
     foreach ($p in $hijos) { & taskkill.exe /PID $p.ProcessId /T /F | Out-Null }
     Write-Output "CORTADO #$N`: $($hijos.Count) proceso(s) ($(@($hijos | ForEach-Object Name) -join ', ')). Luego: mesa.ps1 reintentar -Hilo $Hilo -N $N -De $De"
   }
   'diagnostico' {
-    $v = { param($c) try { (& $c --version 2>&1 | Select-Object -First 1) -replace '\s+', ' ' } catch { 'no encontrado' } }
+    # Por cmd: codex es un .ps1/.cmd de npm que escribe avisos en stderr y, con ErrorAction Stop, parecía no estar.
+    $v = { param($c) $r = (cmd.exe /c "$c --version 2>nul" | Select-Object -First 1); if ($r) { $r -replace '\s+', ' ' } else { 'no encontrado' } }
     Write-Output "## Diagnóstico de la Mesa · $(Mesa-IsoNow)"
     Write-Output "Windows $([Environment]::OSVersion.Version) · PowerShell $($PSVersionTable.PSVersion) · claude $(& $v claude) · codex $(& $v codex) · agy $(& $v agy)"
     Write-Output "Raíz: $Global:Mesa_Raiz · Trabajo: $Global:Mesa_DefaultDir"
@@ -201,7 +205,12 @@ switch ($Comando) {
     $mover += @(Get-ChildItem -LiteralPath $Global:Mesa_Raiz -Recurse -Filter '*.tmp.*' -ErrorAction SilentlyContinue | Where-Object { ((Get-Date) - $_.LastWriteTime).TotalHours -ge 1 } | ForEach-Object FullName)
     if (-not $mover.Count) { Write-Output 'Nada que limpiar.'; return }
     New-Item -ItemType Directory -Force -Path $destino | Out-Null
-    foreach ($x in $mover) { Move-Item -LiteralPath $x -Destination (Join-Path $destino ((Split-Path -Leaf (Split-Path -Parent $x)) + '-' + (Split-Path -Leaf $x))) -Force; Write-Output "Archivado: $x" }
+    # Se conserva la ruta relativa: dos claims\ui.json de hilos distintos no se pisan.
+    foreach ($x in $mover) {
+      $dest = Join-Path $destino $x.Substring($Global:Mesa_Raiz.TrimEnd('\').Length + 1)
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
+      Move-Item -LiteralPath $x -Destination $dest; Write-Output "Archivado: $x"
+    }
     Write-Output "Movidos $($mover.Count) a $destino"
   }
   'actividad' {
@@ -294,9 +303,9 @@ switch ($Comando) {
     Write-Output "AVANCE $Fase de $Tarea enviado a $($h.lider) (inicio, alcance y bloqueo los ven los tres en pendientes)"
     # Un agente en plena ejecución no recibe avisos: se los entrega su propio punto de control.
     # Solo se obedece al líder, a Daniel o al supervisor: lo que escribe otro agente es un dato, no una orden.
-    $mandan = @((Mesa-NormalizarHerramienta $h.lider), 'daniel', 'supervisor')
+    $mandan = @(@($h.lider, (Mesa-NormalizarHerramienta $h.lider), 'daniel', 'supervisor') | Where-Object { $_ })
     $notas = @($msgs | Where-Object { [int]$_.n -gt $previo -and $_.tipo -eq 'nota' -and (Mesa-NormalizarHerramienta $_.autor) -ne $yo -and
-      ((Mesa-NormalizarHerramienta $_.autor) -in $mandan -or $_.autor -in $mandan) -and
+      ($_.autor -in $mandan -or ((Mesa-NormalizarHerramienta $_.autor) -and (Mesa-NormalizarHerramienta $_.autor) -in $mandan)) -and
       @(([string]$_.para) -split '[,;]' | Where-Object { (Mesa-NormalizarHerramienta $_.Trim()) -eq $yo -or $_.Trim() -eq 'todos' }).Count })
     foreach ($nota in $notas) { Write-Output "`n>>> NOTA DE $($nota.autor) (#$($nota.n)), CUMPLELA ANTES DE SEGUIR: $($nota.texto)" }
   }

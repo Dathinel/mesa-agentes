@@ -241,9 +241,13 @@ function Ejecutar-Mensaje($carpetaHilo, $archivoMsg) {
     if ((Mesa-LeerJson $archivoMsg).estado -ne 'aprobado') { return $false }
     $m.estado  = 'ejecutando'
     # pid: el supervisor distingue así un encargo vivo de uno huérfano (proceso muerto).
-    $m.llamada = [ordered]@{ inicio = $inicioIso; fin = $null; salida = $null; log = $logPath; pid = $PID }
+    $intentoId = [Guid]::NewGuid().ToString('N').Substring(0, 12)
+    $m.llamada = [ordered]@{ inicio = $inicioIso; fin = $null; salida = $null; log = $logPath; pid = $PID; intento = $intentoId }
     Mesa-EscribirJson $archivoMsg $m
   } finally { $candado.Dispose() }
+  # Qué encargo corre ahora en este proceso: «cortar» solo actúa si coincide, así no mata el encargo siguiente del mismo panel.
+  $enCurso = Join-Path $Global:Mesa_Raiz "agentes\en-curso-$PID.json"
+  Mesa-EscribirJson $enCurso ([ordered]@{ hilo = $hiloId; n = [int]$m.n; intento = $intentoId; inicio = $inicioIso })
 
   $codigoSalida = 0
   if ($Simular) {
@@ -350,17 +354,21 @@ function Ejecutar-Mensaje($carpetaHilo, $archivoMsg) {
   }
 
   $cola = if (Test-Path -LiteralPath $logPath) { $t = [IO.File]::ReadAllText($logPath); $t.Substring([Math]::Max(0, $t.Length - 4000)) } else { '' }
-  $causa = if ($codigoSalida -ne 0 -or $cola -match '"status"\s*:\s*"ERROR"') { Mesa-CausaFallo $cola } else { $null }
-  if ($causa -and $codigoSalida -eq 0) { $codigoSalida = 1 }
+  # Un «status: ERROR» es fallo aunque el CLI salga con 0; la causa solo lo clasifica.
+  if ($codigoSalida -eq 0 -and $cola -match '"status"\s*:\s*"(ERROR|RESOURCE_EXHAUSTED)"') { $codigoSalida = 1 }
+  $causa = if ($codigoSalida -ne 0) { Mesa-CausaFallo $cola } else { $null }
   $estadoFinal = if ($codigoSalida -eq 0) { 'hecho' } else { 'fallo' }
   $m.estado = $estadoFinal
-  $m.llamada = [ordered]@{ inicio = $inicioIso; fin = $finIso; salida = [int]$codigoSalida; log = $logPath; causa = $causa.causa; hasta = $causa.hasta }
+  $m.llamada = [ordered]@{ inicio = $inicioIso; fin = $finIso; salida = [int]$codigoSalida; log = $logPath; pid = $PID; intento = $intentoId; causa = $causa.causa; hasta = $causa.hasta }
   if (-not $m.traspaso) {
     $m | Add-Member -NotePropertyName traspaso -NotePropertyValue ([ordered]@{ hecho = $datos.texto; falta = ''; archivos = @($logPath) }) -Force
   } else {
     $m.traspaso.hecho = $datos.texto
   }
-  Mesa-EscribirJson $archivoMsg $m
+  # Bajo el candado del hilo, como el supervisor: el resultado real gana a un «huerfano» escrito mientras tanto.
+  $candado = Mesa-BloquearHilo $carpetaHilo
+  try { Mesa-EscribirJson $archivoMsg $m } finally { $candado.Dispose() }
+  Remove-Item -LiteralPath $enCurso -ErrorAction SilentlyContinue
 
   # Escribir mensaje de respuesta en el hilo con el resultado
   $autorResp = if ($m.para) { $m.para } else { $herramienta }

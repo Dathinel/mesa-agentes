@@ -1,6 +1,6 @@
 # Diagnóstico de la Mesa (Fase 2)
 
-19 de octubre de 2026. Comparación punto por punto con la lista de requisitos, ordenada por prioridad: primero recuperar a un agente que muere. **Estado** es cómo estaba antes de esta ronda; **Ahora** es lo que quedó hecho y probado en esta ronda (Daniel pidió aplicar lo recomendado). Las pruebas citadas están en `pruebas\caos.ps1` (12/12) y corren con `Probar.bat`.
+19 de octubre de 2026. Comparación punto por punto con la lista de requisitos, ordenada por prioridad: primero recuperar a un agente que muere. **Estado** es cómo estaba antes de esta ronda; **Ahora** es lo que quedó hecho y probado en esta ronda (Daniel pidió aplicar lo recomendado). Las pruebas citadas están en `pruebas\caos.ps1` (15/15) y corren con `Probar.bat`.
 
 Leyenda: ✅ cubierto · 🟡 parcial · ❌ no.
 
@@ -90,7 +90,7 @@ Estructura aplicada: `herramientas\` (código), `panel\` (oficina), `pruebas\` (
 
 ## I. Pruebas
 
-✅ Agentes simulados (`MESA_SIMULAR=1`; `ejecutar.ps1 -Simular` ya existía y ahora también lo activan los paneles) y caos en copia aislada: `pruebas\caos.ps1`, 12 casos con esperado y obtenido, 12/12. Faltan: matar el proceso real de un CLI a mitad (se simula con un PID muerto) y la suspensión del PC.
+✅ Agentes simulados (`MESA_SIMULAR=1`; `ejecutar.ps1 -Simular` ya existía y ahora también lo activan los paneles) y caos en copia aislada: `pruebas\caos.ps1`, 15 casos con esperado y obtenido, 15/15. Faltan: matar el proceso real de un CLI a mitad (se simula con un PID muerto) y la suspensión del PC.
 
 ## Lo que sobra o es exagerado para tu caso
 
@@ -107,3 +107,7 @@ Estructura aplicada: `herramientas\` (código), `panel\` (oficina), `pruebas\` (
 2. Archivar hilos cerrados de más de 30 días (C12).
 3. Hook `SessionStart` de Claude con tus pendientes y reclamos (B8), si lo apruebas.
 4. Los `deny` de Claude y la lista concreta de agy (E3), si los apruebas.
+
+## Verificación independiente (codex, gpt-6-astra)
+
+Codex revisó el bloque en solo lectura y encontró 3 fallos graves y 5 menores, todos corregidos y con prueba: `Probar.bat` no pasaba `-File` y en rutas con espacios no llegaba a correr las pruebas; `cortar` podía matar el encargo siguiente del mismo panel (ahora exige que `datos\agentes\en-curso-<pid>.json` coincida con el intento); el supervisor podía pisar un `hecho` con `huerfano` (ahora relee bajo el candado del hilo y `ejecutar.ps1` escribe el final bajo el mismo candado); un `status: ERROR` con salida 0 quedaba `hecho`; con líder `daniel` una nota de un desconocido contaba como orden; `excluidos.txt` de varias líneas no funcionaba; `limpiar` podía sobrescribir reclamos con el mismo nombre; los avisos no se repetían en un segundo intento del mismo encargo.

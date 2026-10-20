@@ -89,11 +89,18 @@ function Vuelta {
         $tienePid = $m.llamada.PSObject.Properties['pid'] -and $m.llamada.pid
         $muerto = if ($tienePid) { -not (Vivo $m.llamada.pid) } else { $logEdad -gt 120 }
         $clave = "$($d.Name)#$($m.n)"
+        $intento = "$($m.llamada.inicio)"
         if ($muerto) {
-          $m.estado = 'huerfano'; $m.llamada.fin = Mesa-IsoNow
-          Mesa-EscribirJson $f.FullName $m
+          # Releer bajo el candado del hilo: si ejecutar.ps1 terminó entretanto, su resultado no se pisa.
+          $candado = Mesa-BloquearHilo $d.FullName
+          try {
+            $actual = Mesa-LeerMensaje $f.FullName
+            if (-not $actual -or $actual.estado -ne 'ejecutando' -or "$($actual.llamada.inicio)" -ne $intento) { continue }
+            $actual.estado = 'huerfano'; $actual.llamada.fin = Mesa-IsoNow
+            Mesa-EscribirJson $f.FullName $actual
+          } finally { $candado.Dispose() }
           $hace = [int](($ahora - [datetime]::Parse($m.llamada.inicio)).TotalHours)
-          Informar "huerfano-$clave" $memoria $(if ($hace -lt 24) { $d.Name }) $m.autor "el encargo $clave de $a quedó huérfano: su proceso ya no existe (empezó hace $hace h)" `
+          Informar "huerfano-$clave-$intento" $memoria $(if ($hace -lt 24) { $d.Name }) $m.autor "el encargo $clave de $a quedó huérfano: su proceso ya no existe (empezó hace $hace h)" `
             'lo marqué como huérfano; su reclamo y sus puntos de control siguen en el hilo' "que el líder lo relance con: mesa.ps1 reintentar -Hilo $($d.Name) -N $($m.n) -De <líder>"
           continue
         }
@@ -103,7 +110,7 @@ function Vuelta {
         $sinRed = $cola -match '(?i)waiting for network' -and ($ahora - [datetime]::Parse($m.llamada.inicio)).TotalMinutes -gt 10
         if ($logEdad -gt $colgadoMin -or $sinRed) {
           $estado[$a].estado = 'colgado'; $estado[$a].motivo = if ($sinRed) { 'sin red: el CLI reintenta conectar' } else { "sin salida nueva en $([int]$logEdad) min" }
-          Informar "colgado-$clave" $memoria $d.Name $m.autor "$a lleva $([int]$logEdad) min sin avanzar en $clave ($($estado[$a].motivo))" 'nada todavía: el proceso sigue vivo' `
+          Informar "colgado-$clave-$intento" $memoria $d.Name $m.autor "$a lleva $([int]$logEdad) min sin avanzar en $clave ($($estado[$a].motivo))" 'nada todavía: el proceso sigue vivo' `
             "si no responde, córtalo con mesa.ps1 cortar -Hilo $($d.Name) -N $($m.n) -De <líder> y luego reintentar"
         }
       } elseif ($m.llamada.fin -and ($m.tipo -eq 'encargo')) {
