@@ -102,24 +102,31 @@ function Vigia-EscrituraCoordinada([string]$Agente, [string]$Valor, [string]$Cwd
 
     $yo = Mesa-NormalizarHerramienta $Agente
     if (-not $yo) { return $null }
-    $propia = $false
     $ajenas = New-Object System.Collections.Generic.List[string]
     foreach ($reclamo in @(Mesa-Reclamos | Where-Object { $_.toca -and (Vigia-ReclamoActivo $_) })) {
       if (-not (Vigia-RutaReclamada $relativa ([string]$reclamo.toca))) { continue }
       $dueno = Mesa-NormalizarHerramienta ([string]$reclamo.agente)
       if (-not $dueno) { $dueno = [regex]::Match([string]$reclamo.agente, '^(?i)(claude|codex|agy)').Groups[1].Value.ToLowerInvariant() }
-      if ($dueno -eq $yo) { $propia = $true }
-      elseif ($dueno) { $ajenas.Add($dueno) }
+      if ($dueno -ne $yo -and $dueno) { $ajenas.Add($dueno) }
     }
     if ($ajenas.Count) { return @{ nivel='alto'; motivo="Escritura sobre archivo reclamado por otro agente ($((@($ajenas | Select-Object -Unique)) -join ', '))" } }
-    if (-not $propia) { return @{ nivel='medio'; motivo='Escritura en panel/herramientas sin reclamo propio para esa ruta' } }
+    # Una ruta sin reclamo no prueba un conflicto; sólo se avisa si otro agente la reclama.
   } catch { return @{ nivel='medio'; motivo='No se pudo comprobar el reclamo de esta escritura' } }
   return $null
+}
+function Vigia-EsSoloLecturaExcluida([string]$Tipo, [string]$Valor, [string]$Operacion) {
+  if ($Tipo -eq 'archivo') { return $Operacion -eq 'lectura' }
+  if ($Tipo -ne 'comando') { return $false }
+  # Las consultas no sacan datos del ámbito: grep/sed/cat/ls y lectores de PowerShell.
+  # Si el mismo comando contiene una escritura o un envío, conserva la alerta.
+  $lector = $Valor -match '(?i)(?:^|[;&|]\s*|&&\s*)(?:grep|sed|cat|ls|Get-Content|Select-String)\b'
+  $activo = $Valor -match '(?i)\b(?:Set-Content|Add-Content|Out-File|Remove-Item|Copy-Item|Move-Item|curl|Invoke-WebRequest|scp|rsync|git\s+push)\b|(?:^|\s)[12]?>>?'
+  return $lector -and -not $activo
 }
 function Vigia-Evaluar([string]$Tipo, [string]$Valor, [string]$Cwd, [string]$Operacion, [string]$Agente) {
   $alto = New-Object System.Collections.Generic.List[string]
   $medio = New-Object System.Collections.Generic.List[string]
-  if ($Valor -match $Global:Mesa_Excluidos) { $alto.Add('Referencia a ámbito excluido') }
+  if ($Valor -match $Global:Mesa_Excluidos -and -not (Vigia-EsSoloLecturaExcluida $Tipo $Valor $Operacion)) { $alto.Add('Referencia a ámbito excluido') }
   if ($Tipo -eq 'archivo' -and $Operacion -ne 'lectura') {
     if ($Valor -match '(?i)((?:^|[\\/])\.claude[\\/]settings\.json|(?:^|[\\/])\.codex[\\/]config\.toml|(?:^|[\\/])auth\.json|\.agentes-token|(?:^|[\\/])[^\\/]*\.env(?:\..*)?$)') { $alto.Add('Cambio de configuración sensible') }
     try {
@@ -189,6 +196,9 @@ function Vigia-Evaluar([string]$Tipo, [string]$Valor, [string]$Cwd, [string]$Ope
           $normal = $ruta -replace '/', '\\'
           $varMatch = [regex]::Match($normal, '^\$(\w+)(.*)$')
           if ($varMatch.Success -and $variables.ContainsKey($varMatch.Groups[1].Value)) { $normal = ([string]$variables[$varMatch.Groups[1].Value] + $varMatch.Groups[2].Value) -replace '/', '\' }
+          # Los clones y pruebas temporales creados por la propia prueba se pueden limpiar.
+          $temporalPropia = $normal -match '(?i)(?:%TEMP%|\$env:(?:TEMP|TMP)|\$TEMP|\$TMP)[\\/](?:mesa-clon-|cuadrilla-limpio-|cuadrilla-prueba-)'
+          if ($temporalPropia) { continue }
           # Las variables que no se pueden resolver quedan para revisión, nunca se aprueban como seguras.
           if ($normal -match '\$' -and $normal -notmatch '\.\.|\*') { $conVariable = $true; continue }
           $rutaAmbigua = $normal -match '(?i)(?:^|\\)(?:playground|plugins)(?:\\|$)'
@@ -231,6 +241,25 @@ function Vigia-Evaluar([string]$Tipo, [string]$Valor, [string]$Cwd, [string]$Ope
   if ($medio.Count) { return @{ nivel='medio'; motivo=($medio | Select-Object -Unique) -join '; ' } }
 }
 
+function Vigia-RegistrarAlerta([string]$Ruta, $Registro) {
+  $previas = @(Mesa-RegistroLocal $Ruta)
+  $indice = -1
+  for ($i = $previas.Count - 1; $i -ge 0; $i--) {
+    if ($previas[$i].motivo -eq $Registro.motivo -and $previas[$i].valor -eq $Registro.valor) { $indice=$i; break }
+  }
+  if ($indice -lt 0) {
+    $Registro.repeticiones = 1; $Registro.ultima_hora = $Registro.hora
+    Mesa-AnexarLinea $Ruta ($Registro | ConvertTo-Json -Compress)
+    return
+  }
+  # Conserva cada alerta histórica: se actualiza sólo su agregado compatible JSONL.
+  $previa = $previas[$indice]
+  $previa.repeticiones = [int]$previa.repeticiones + 1
+  $previa.ultima_hora = $Registro.hora
+  $lineas = foreach ($a in $previas) { $a | ConvertTo-Json -Compress }
+  [IO.File]::WriteAllLines($Ruta, [string[]]$lineas, (New-Object Text.UTF8Encoding $false))
+}
+
 function Invocar-Vigia {
   $raiz = if ($env:VIGIA_RAIZ_PRUEBA) { Join-Path $env:VIGIA_RAIZ_PRUEBA 'datos' } else { $Global:Mesa_Raiz }
   New-Item -ItemType Directory -Force -Path $raiz | Out-Null
@@ -264,7 +293,6 @@ function Invocar-Vigia {
           if ($meta.cwd -and $meta.cwd -notmatch $Global:Mesa_Excluidos) { $cwd=$meta.cwd }
           foreach ($a in @(Mesa-Acciones $e)) {
             if ($a.tipo -eq 'pasante') { continue }
-            if ($a.valor -match $Global:Mesa_Excluidos) { continue }
             if (!$a.hora) { $a.hora=$f.LastWriteTime.ToString('o') }
             $contexto = if ($a.cwd) { $a.cwd } else { $cwd }
             $regla = Vigia-Evaluar $a.tipo $a.valor $contexto $a.operacion $agente
@@ -277,15 +305,10 @@ function Invocar-Vigia {
             if ($limpio.Length -gt 200) { $limpio = $limpio.Substring(0,197) + '...' }
             $registro = [ordered]@{ agente=$agente; modelo=$modelo; hora=$a.hora; tipo=$a.tipo; valor=$limpio; herramienta=$a.herramienta; operacion=$a.operacion }
             Mesa-AnexarLinea (Join-Path $raiz 'actividad.jsonl') ($registro | ConvertTo-Json -Compress)
-            # Los avisos medios repetidos (mismo agente, motivo y valor) no se vuelven a anotar durante 15 min.
-            $claveAviso = "$agente|$($regla.motivo)|$limpio"
-            if ($regla -and $regla.nivel -eq 'medio') {
-              if ($recientes.ContainsKey($claveAviso)) { $regla = $null } else { $recientes[$claveAviso] = Mesa-IsoNow }
-            }
             if ($regla) {
               $registro.id = [Guid]::NewGuid().ToString('N').Substring(0,12)
               $registro.nivel = $regla.nivel; $registro.motivo = $regla.motivo
-              Mesa-AnexarLinea (Join-Path $raiz 'alertas.jsonl') ($registro | ConvertTo-Json -Compress)
+              Vigia-RegistrarAlerta (Join-Path $raiz 'alertas.jsonl') $registro
             }
           }
         }
