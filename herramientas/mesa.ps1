@@ -202,8 +202,14 @@ switch ($Comando) {
       $ult = @((Mesa-UltimaActividad $a), [datetime]::Parse($r.fecha)) | Sort-Object | Select-Object -Last 1
       if (((Get-Date) - $ult).TotalHours -ge $horas) { $mover += $r.ruta }
     }
+    $mover += @(Get-ChildItem -LiteralPath (Join-Path $Global:Mesa_Raiz 'reclamos') -Filter 'lider.json' -ErrorAction SilentlyContinue | ForEach-Object FullName)
     $mover += @(Get-ChildItem -LiteralPath (Join-Path $Global:Mesa_Raiz 'reclamos') -Filter 'relevo-*.lock' -ErrorAction SilentlyContinue | Where-Object { ((Get-Date) - $_.LastWriteTime).TotalHours -ge 24 } | ForEach-Object FullName)
     $mover += @(Get-ChildItem -LiteralPath $Global:Mesa_Raiz -Recurse -Filter '*.tmp.*' -ErrorAction SilentlyContinue | Where-Object { ((Get-Date) - $_.LastWriteTime).TotalHours -ge 1 } | ForEach-Object FullName)
+    # Hilos cerrados hace más de 30 días: se mueven enteros a datos\archivo\hilos, nunca se borran.
+    $mover += @(Get-ChildItem -LiteralPath $Global:Mesa_Hilos -Directory -ErrorAction SilentlyContinue | Where-Object {
+      $hj = Mesa-LeerMensaje (Join-Path $_.FullName 'hilo.json'); $hj -and $hj.estado -eq 'cerrado' -and $hj.actualizado -and ([datetime]::Parse($hj.actualizado) -lt (Get-Date).AddDays(-30)) } | ForEach-Object FullName)
+    $viejos = @(Get-ChildItem -LiteralPath $Global:Mesa_Hilos -Directory -ErrorAction SilentlyContinue | Where-Object { $hj = Mesa-LeerMensaje (Join-Path $_.FullName 'hilo.json'); $hj -and $hj.estado -eq 'abierto' -and ([datetime]::Parse($hj.actualizado) -lt (Get-Date).AddDays(-30)) } | ForEach-Object Name)
+    if ($viejos.Count) { Write-Output "Abiertos sin actividad en 30 días (ciérralos con archivar si están terminados): $($viejos -join ', ')" }
     if (-not $mover.Count) { Write-Output 'Nada que limpiar.'; return }
     New-Item -ItemType Directory -Force -Path $destino | Out-Null
     # Se conserva la ruta relativa: dos claims\ui.json de hilos distintos no se pisan.
@@ -249,6 +255,7 @@ switch ($Comando) {
   'reclamar' {
     if (-not $Tarea -or -not $De) { throw 'Uso: mesa.ps1 reclamar -Tarea <id> -De <agente> [-Hilo <id>] [-Texto <archivos>]' }
     if ($Tarea -notmatch '^[a-z0-9][a-z0-9-]*$') { throw 'Tarea: solo minúsculas, cifras y guiones.' }
+    if ($Tarea -eq 'lider') { throw "El liderazgo no se reclama: vive en el hilo.json de cada hilo. Cámbialo con 'mesa.ps1 lider -Hilo <id> -Nuevo <agente>'." }
     # Una sola tarea por agente: los reclamos de archivo sueltos (archivo-*) y el de líder no cuentan.
     $esTarea = { param($t) $t -notlike 'archivo-*' -and $t -ne 'lider' }
     if (& $esTarea $Tarea) {
@@ -271,6 +278,8 @@ switch ($Comando) {
   }
   'reclamos' {
     $items = @(Mesa-Reclamos)
+    # Los líderes se muestran derivados de los hilos abiertos, nunca de un archivo aparte.
+    $items += @(Get-ChildItem -LiteralPath $Global:Mesa_Hilos -Directory -ErrorAction SilentlyContinue | ForEach-Object { $hj = Mesa-LeerMensaje (Join-Path $_.FullName 'hilo.json'); if ($hj -and $hj.estado -eq 'abierto' -and $hj.lider -and ([datetime]::Parse($hj.actualizado) -gt (Get-Date).AddDays(-2))) { [pscustomobject]@{ tarea = 'lider'; agente = $hj.lider; fecha = $hj.actualizado; hilo = $hj.id; toca = '(hilo.json)'; ruta = $null } } })
     if ($Json) { ConvertTo-Json -InputObject $items -Depth 3 } elseif (!$items.Count) { '(sin reclamos)' } else { $items | Format-Table tarea,agente,fecha,hilo,toca -AutoSize | Out-String -Width 220 }
   }
   'soltar' {
@@ -297,6 +306,13 @@ switch ($Comando) {
     if (-not $mio.Count) { throw "Antes del avance, reclama la tarea: mesa.ps1 reclamar -Tarea $Tarea -De $De -Hilo $Hilo -Texto <archivos>" }
     $toca = $mio[0].toca
     $texto = "[$($Fase.ToUpper())] $Tarea" + $(if ($Fase -eq 'inicio' -and $toca) { " (archivos: $toca)" } else { '' }) + ": $Texto"
+    # Punto de control con el estado de git del worktree o repo donde trabaja (su último encargo en este hilo).
+    $dirTrabajo = @(Get-ChildItem -LiteralPath $carpeta -Filter '*-*.json' | Sort-Object Name -Descending | ForEach-Object { Mesa-LeerMensaje $_.FullName } |
+      Where-Object { $_.tipo -eq 'encargo' -and (Mesa-NormalizarHerramienta $_.para) -eq (Mesa-NormalizarHerramienta $De) -and $_.dir } | Select-Object -First 1).dir
+    if ($dirTrabajo -and (Test-Path -LiteralPath $dirTrabajo)) {
+      $git = @(& { $ErrorActionPreference = 'Continue'; & git -C $dirTrabajo status --porcelain -b 2>$null } | Select-Object -First 12)
+      if ($LASTEXITCODE -eq 0 -and $git.Count) { $texto += "`n[git $dirTrabajo]`n" + ($git -join "`n") }
+    }
     $yo = Mesa-NormalizarHerramienta $De
     $msgs = @(Get-ChildItem -LiteralPath $carpeta -Filter '*-*.json' | Sort-Object Name | ForEach-Object { Mesa-LeerMensaje $_.FullName } | Where-Object { $_ })
     $previo = (@($msgs | Where-Object { (Mesa-NormalizarHerramienta $_.autor) -eq $yo -and $_.tipo -like 'avance-*' } | ForEach-Object { [int]$_.n }) + 0 | Measure-Object -Maximum).Maximum
@@ -403,6 +419,8 @@ switch ($Comando) {
       [IO.File]::WriteAllText($informe, ($lineas -join "`n") + "`n", (New-Object Text.UTF8Encoding $false))
     } finally { $candado.Dispose() }
     Nota-Hilo $carpeta $De 'todos' 'archivo' "Archivadas $($abiertas.Count) entregas; informe en $informe" @($informe) | Out-Null
+    # Todo aceptado y archivado: el hilo queda cerrado (a los 30 días, limpiar lo mueve a datos\archivo\hilos).
+    Mesa-ActualizarHilo $carpeta { param($x) $x.estado = 'cerrado'; $x.actualizado = (Mesa-IsoNow) } | Out-Null
     Write-Output "ARCHIVADAS $($abiertas.Count); informe: $informe"
   }
   'tareas' {

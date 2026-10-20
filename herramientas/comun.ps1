@@ -71,6 +71,20 @@ function Mesa-Aprobacion($cfg) {
   }
 }
 
+# Lo nuevo para un agente desde una fecha: lo dirigido a él o a 'todos', y los inicio/alcance/bloqueo y cambios de líder de los demás.
+function Mesa-Novedades($yo, [datetime]$desde, [int]$max = 600) {
+  foreach ($a in @(Get-ChildItem -LiteralPath $Global:Mesa_Hilos -Recurse -Filter '*-*.json' -ErrorAction SilentlyContinue |
+      Where-Object { $_.LastWriteTime -gt $desde -and $_.Directory.Name -notin @('logs', 'entregas', 'claims') } | Sort-Object LastWriteTime)) {
+    $m = Mesa-LeerMensaje $a.FullName
+    if ($m -and $m.tipo -ne 'encargo' -and (Mesa-NormalizarHerramienta $m.autor) -ne $yo -and
+        ($m.tipo -in @('avance-inicio', 'avance-alcance', 'avance-bloqueo', 'lider') -or
+         @(([string]$m.para) -split '[,;]' | Where-Object { (Mesa-NormalizarHerramienta $_.Trim()) -eq $yo -or $_.Trim() -eq 'todos' }).Count)) {
+      $t = [string]$m.texto
+      '{0} #{1} {2} -> {3} [{4}]: {5}' -f $a.Directory.Name, $m.n, $m.autor, $m.para, $m.tipo, $(if ($t.Length -gt $max) { $t.Substring(0, $max) + '…' } else { $t })
+    }
+  }
+}
+
 function Mesa-IsoNow {
   (Get-Date).ToString('yyyy-MM-ddTHH:mm:sszzz')
 }
@@ -154,7 +168,8 @@ function Mesa-EscribirMensaje($carpetaHilo, $msg, $autor) {
 
 # Reclamos globales (datos\reclamos) y por hilo (hilos\<id>\claims): quién tiene qué.
 function Mesa-Reclamos {
-  $archivos = @(Get-ChildItem -LiteralPath (Join-Path $Global:Mesa_Raiz 'reclamos') -Filter '*.json' -ErrorAction SilentlyContinue)
+  # lider.json era una segunda fuente del líder: ya no cuenta. El líder de cada hilo vive solo en su hilo.json.
+  $archivos = @(Get-ChildItem -LiteralPath (Join-Path $Global:Mesa_Raiz 'reclamos') -Filter '*.json' -ErrorAction SilentlyContinue | Where-Object Name -ne 'lider.json')
   $archivos += @(Get-ChildItem -Path (Join-Path $Global:Mesa_Hilos '*\claims\*.json') -ErrorAction SilentlyContinue)
   foreach ($a in $archivos) {
     try { $r = Mesa-LeerJson $a.FullName } catch { continue }

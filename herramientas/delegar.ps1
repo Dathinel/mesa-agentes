@@ -33,7 +33,10 @@ param(
 
   # Qué hace el encargo, para la autoaprobación: lectura, mesa, relevo, repo, carpeta, red o irreversible. Sin él se deduce de -Dir.
   [ValidateSet('lectura','mesa','relevo','repo','carpeta','red','irreversible')]
-  [string]$Tipo
+  [string]$Tipo,
+
+  # Trabajo en un worktree propio del agente (<repo>\.claude\worktrees\<agente>-<tarea>) si -Dir es un repositorio git.
+  [switch]$Worktree
 )
 if ($Simular) { $env:MESA_SIMULAR = '1' }
 
@@ -51,6 +54,12 @@ if (-not $Modelo) {
   $Modelo = Mesa-ModeloPorDefecto $paraNorm $cfgTmp
 }
 $hojaEncargo = Split-Path -Leaf $Encargo
+if ($Worktree) {
+  $tareaWt = (($hojaEncargo -replace '\.md$', '' -replace '^encargo-', '').ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim('-')
+  $wt = try { & "$PSScriptRoot\worktrees.ps1" crear -Dir $Dir -Agente $paraNorm -Tarea $tareaWt } catch { $_.Exception.Message }
+  if ($wt -and (Test-Path -LiteralPath ([string]($wt | Select-Object -Last 1)))) { $Dir = [string]($wt | Select-Object -Last 1); Write-Output "Worktree: $Dir" }
+  else { Write-Warning "Sin worktree ($($wt -join ' ')): se trabaja en $Dir con reclamos." }
+}
 $tituloBase = ($hojaEncargo -replace '\.md$', '')
 
 if (-not $Hilo) {

@@ -127,6 +127,46 @@ try {
   }
   Caso 'Encargo que escribe fuera de la mesa' 'repo: pendiente, mesa: aprobado, lectura: aprobado, irreversible: pendiente' ($estados -join ', ') (($estados -join ',') -eq 'pendiente,aprobado,aprobado,pendiente')
 
+  # 13. Suspensión del PC: tras un salto de reloj, el supervisor no avisa de caídas en esa vuelta; en la siguiente, sí.
+  Remove-Item -LiteralPath (Join-Path $raiz 'supervisor-estado.json') -ErrorAction SilentlyContinue
+  [IO.File]::WriteAllText((Join-Path $raiz 'trabajador-agy.latido'), (Mesa-IsoNow)); (Get-Item (Join-Path $raiz 'trabajador-agy.latido')).LastWriteTime = (Get-Date).AddMinutes(-20)
+  (Get-Item (Join-Path $raiz 'agentes\supervisor.latido')).LastWriteTime = (Get-Date).AddMinutes(-20)
+  $notasAntes = @(Get-ChildItem -Path (Join-Path $Global:Mesa_Hilos '*\*-supervisor.json')).Count
+  Supervisar
+  $tras = "$((Agente agy).estado)"; $bitS = (Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $raiz ("bitacora\{0}.md" -f (Get-Date -Format 'yyyy-MM-dd')))) -match 'salto de 20 min'
+  Supervisar
+  Caso 'Salto de reloj por suspensión' 'primera vuelta sin caída y anotada; la siguiente marca agy caido' "tras el salto=$tras, bitácora=$bitS, siguiente=$((Agente agy).estado)" ($tras -ne 'caido' -and $bitS -and (Agente agy).estado -eq 'caido')
+
+  # 14. Dos fuentes del líder que discrepan: manda hilo.json; el lider.json viejo no da poder ni se puede crear otro.
+  Mesa-EscribirJson (Join-Path $raiz 'reclamos\lider.json') ([ordered]@{ tarea = 'lider'; agente = 'codex'; hilo = $hilo; fecha = (Mesa-IsoNow) })
+  $lid = @((& "$h\mesa.ps1" reclamos -Json | ConvertFrom-Json) | Where-Object { $_.tarea -eq 'lider' -and $_.hilo -eq $hilo } | ForEach-Object agente)
+  $poder = try { & "$h\mesa.ps1" tareas -Hilo $hilo -De codex -Tarea xx | Out-Null; 'codex pudo' } catch { 'codex no puede' }
+  $nuevoLider = try { & "$h\mesa.ps1" reclamar -Tarea lider -De codex -Hilo $hilo | Out-Null; 'se creó' } catch { 'rechazado' }
+  Caso 'Líder que discrepa entre fuentes' 'reclamos muestra claude; codex no actúa como líder; reclamar lider rechazado' "líderes=$($lid -join ','); $poder; $nuevoLider" (($lid -join ',') -eq 'claude' -and $poder -eq 'codex no puede' -and $nuevoLider -eq 'rechazado')
+
+  # 15. Worktrees: uno por agente y tarea, con tope; la limpieza nunca borra uno sucio (el de un agente muerto) ni uno sin integrar.
+  $env:MESA_TRABAJO = Join-Path $raiz 'trabajo'; $repoWt = Join-Path $env:MESA_TRABAJO 'repo'
+  New-Item -ItemType Directory -Force $repoWt | Out-Null
+  & { $ErrorActionPreference = 'Continue'; git -C $repoWt init -q -b main 2>$null; git -C $repoWt -c user.name=prueba -c user.email=p@p commit -q --allow-empty -m inicio 2>$null }
+  $w1 = & "$h\worktrees.ps1" crear -Dir $repoWt -Agente codex -Tarea t1
+  $w2 = & "$h\worktrees.ps1" crear -Dir $repoWt -Agente codex -Tarea t2
+  $w3 = & "$h\worktrees.ps1" crear -Dir $repoWt -Agente codex -Tarea t3
+  $tope = try { & "$h\worktrees.ps1" crear -Dir $repoWt -Agente codex -Tarea t4; 'creó el cuarto' } catch { 'tope' }
+  [IO.File]::WriteAllText((Join-Path $w1 'a-medias.txt'), 'trabajo sin confirmar de un agente que murió')
+  & { $ErrorActionPreference = 'Continue'; git -C $w3 -c user.name=prueba -c user.email=p@p commit -q --allow-empty -m 'sin integrar' 2>$null }
+  $limpieza = (& "$h\worktrees.ps1" limpiar) -join ' | '
+  $quedan = "t1=$(Test-Path $w1), t2=$(Test-Path $w2), t3=$(Test-Path $w3)"
+  Caso 'Worktree sucio de un agente muerto' 'ruta en .claude\worktrees, tope a los 3; limpiar quita solo t2 (limpio e integrado) y deja t1 (sucio) y t3 (sin integrar)' "$tope; $quedan; dentro=$($w1 -like '*\.claude\worktrees\codex-t1')" ($tope -eq 'tope' -and $quedan -eq 't1=True, t2=False, t3=True' -and $w1 -like '*\.claude\worktrees\codex-t1' -and $limpieza -match '1 cambios sin confirmar')
+  Remove-Item Env:MESA_TRABAJO
+
+  # 16. Hilos cerrados de más de 30 días: limpiar los archiva enteros; los recientes y los abiertos se quedan.
+  $viejo = & "$h\mesa.ps1" abrir -Titulo 'Viejo cerrado' -Lider claude -Participantes 'claude'
+  $reciente = & "$h\mesa.ps1" abrir -Titulo 'Reciente cerrado' -Lider claude -Participantes 'claude'
+  foreach ($x in @(@($viejo, 40), @($reciente, 2))) { $fh = Join-Path $Global:Mesa_Hilos "$($x[0])\hilo.json"; $o = Mesa-LeerJson $fh; $o.estado = 'cerrado'; $o.actualizado = (Get-Date).AddDays(-$x[1]).ToString('yyyy-MM-ddTHH:mm:sszzz'); Mesa-EscribirJson $fh $o }
+  & "$h\mesa.ps1" limpiar | Out-Null
+  $arch = @(Get-ChildItem -Path (Join-Path $raiz 'archivo') -Recurse -Directory -Filter $viejo).Count
+  Caso 'Archivar hilos cerrados de más de 30 días' 'el de 40 días pasa a archivo con su hilo.json; el de 2 días y el abierto se quedan' "archivado=$arch, viejo en hilos=$(Test-Path (Join-Path $Global:Mesa_Hilos $viejo)), reciente=$(Test-Path (Join-Path $Global:Mesa_Hilos $reciente)), abierto=$(Test-Path (Join-Path $Global:Mesa_Hilos $hilo))" ($arch -eq 1 -and -not (Test-Path (Join-Path $Global:Mesa_Hilos $viejo)) -and (Test-Path (Join-Path $Global:Mesa_Hilos $reciente)) -and (Test-Path (Join-Path $Global:Mesa_Hilos $hilo)))
+
   # 10. El líder deja de responder: relevo del liderazgo por otro panel (prueba existente).
   $relevo = & "$PSScriptRoot\probar-relevo.ps1" 2>&1 | Select-Object -Last 1
   Caso 'Arriendo del líder caduca' 'otro agente toma el liderazgo (probar-relevo.ps1)' "$relevo" ($relevo -match 'fallos=0')

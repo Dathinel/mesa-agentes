@@ -119,6 +119,11 @@ while ($true) {
     if ($Agente -and (Get-Date) -ge $proximoRelevo) {
       $proximoRelevo = (Get-Date).AddMinutes(1)
       try { Vigilar-Lideres } catch { Write-Host "Relevo: $($_.Exception.Message)" -ForegroundColor DarkGray }
+      # Quién vigila al supervisor: cada panel, una vez por caída.
+      $latSup = Join-Path $Global:Mesa_Raiz 'agentes\supervisor.latido'
+      $supParado = (Test-Path -LiteralPath $latSup) -and ((Get-Date) - (Get-Item -LiteralPath $latSup).LastWriteTime).TotalMinutes -gt 3
+      if ($supParado -and -not $script:avisoSupervisor) { Write-Host ("`n━━ {0} · El supervisor no da señales desde hace más de 3 min: vuelve a abrir la mesa con Mesa.bat." -f (Get-Date -Format 'HH:mm')) -ForegroundColor Red }
+      $script:avisoSupervisor = $supParado
     }
     if ((Get-Date) -ge $proxima) {
       $proxima = (Get-Date).AddSeconds($Intervalo)

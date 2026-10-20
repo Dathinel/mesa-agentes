@@ -53,7 +53,14 @@ do {
     $reclamos = @(Mesa-Reclamos)
     $entregas = @(Mesa-Entregas -ConArchivadas)
     $cuota = Leer (Join-Path $Global:Mesa_Raiz 'cuota-estado.json')
+    $wts = @(Leer (Join-Path $Global:Mesa_Raiz 'worktrees.json'))
+    $topeWt = (Leer (Mesa-ConfigPath)).worktrees.max_por_agente
     Linea ('Mesa de agentes · {0:yyyy-MM-dd HH:mm:ss} · cada {1} s' -f $ahora, $Intervalo)
+    $latSup = Join-Path $Global:Mesa_Raiz 'agentes\supervisor.latido'
+    $edadSup = if (Test-Path -LiteralPath $latSup) { ($ahora - [DateTimeOffset](Get-Item -LiteralPath $latSup).LastWriteTime).TotalSeconds } else { -1 }
+    $apr = Mesa-Aprobacion (Leer (Mesa-ConfigPath))
+    if ($edadSup -lt 0 -or $edadSup -gt 90) { Linea ("Supervisor: PARADO $(if ($edadSup -ge 0) { '(último latido ' + (Antiguedad (Get-Item -LiteralPath $latSup).LastWriteTime.ToString('o')) + ')' }) · ábrelo con Mesa.bat") 'Red' }
+    else { Linea ("Supervisor: vivo ({0}) · aprobación: {1} (sin esperar: {2})" -f (Antiguedad (Get-Item -LiteralPath $latSup).LastWriteTime.ToString('o')), $apr.modo, ($apr.tipos -join ', ')) 'Gray' }
     Linea 'Agentes'
     foreach ($agente in @('claude', 'codex', 'agy')) {
       $color = @{ claude = 'DarkYellow'; codex = 'Green'; agy = 'Cyan' }[$agente]
@@ -80,7 +87,9 @@ do {
         'agy' { $cuota.agy.grupos.flash.libre_pct_estimado }
       }
       $libre = if ($null -eq $pct) { '?' } else { '{0:0.#}%' -f [double]$pct }
-      $texto = '{0,-6} | {1,-16} | {2,-14} | {3,-18} | {4,-12} | cuota {5}' -f $agente, $rol, $estado, $nombreTarea, (Antiguedad $latido), $libre
+      $susWt = @($wts | Where-Object { $_.agente -eq $agente })
+      $txtWt = if ($susWt.Count) { " | wt $($susWt.Count)$(if ($topeWt) { "/$topeWt" })$(if (@($susWt | Where-Object { $_.sin_confirmar -gt 0 }).Count) { ' sucio' })" } else { '' }
+      $texto = '{0,-6} | {1,-16} | {2,-14} | {3,-18} | {4,-12} | cuota {5}{6}' -f $agente, $rol, $estado, $nombreTarea, (Antiguedad $latido), $libre, $txtWt
       # El nombre conserva el color del agente incluso en estados de alarma.
       if ($estado -in @('colgado', 'caido', 'sin-cuota', 'necesita-login')) {
         $texto = Recortar $texto

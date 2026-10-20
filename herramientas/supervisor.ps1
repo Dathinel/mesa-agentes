@@ -46,6 +46,7 @@ function Avisar($titulo, $texto) {
 # Cada problema se cuenta una vez, en tres partes: qué pasó, qué hizo el sistema y qué necesita de la persona.
 function Informar($clave, $memoria, $hilo, $para, $paso, $hice, $necesito) {
   if ($memoria.avisados.PSObject.Properties[$clave]) { return }
+  if ($script:tolerante -and $clave -notlike 'huerfano-*' -and $clave -notlike 'cuota-*' -and $clave -notlike 'login-*') { return }
   $memoria.avisados | Add-Member $clave (Mesa-IsoNow)
   $texto = "Qué pasó: $paso · Qué hice: $hice · Qué necesito: $necesito"
   Bitacora $texto
@@ -69,6 +70,12 @@ function Rotar($nombre, $maxMB) {
 }
 
 function Vuelta {
+  # Tras una suspensión del PC (o un supervisor parado) los latidos envejecen de golpe: esa vuelta no avisa de caídas,
+  # solo renueva las referencias. Un proceso muerto sigue siendo huérfano: eso no lo causa el reloj.
+  $latSup = Join-Path $dirAgentes 'supervisor.latido'
+  $salto = if (Test-Path -LiteralPath $latSup) { ((Get-Date) - (Get-Item -LiteralPath $latSup).LastWriteTime).TotalSeconds } else { 0 }
+  $script:tolerante = $salto -gt 2 * [Math]::Max($Intervalo, 30)
+  if ($script:tolerante) { Bitacora "Vuelta tras un salto de $([int]($salto / 60)) min (suspensión o supervisor parado): no aviso de caídas en esta vuelta." }
   $memoria = Mesa-LeerJson $rutaMemoria
   if (-not $memoria) { $memoria = [pscustomobject]@{ avisados = [pscustomobject]@{}; relanzados = [pscustomobject]@{} } }
   $ahora = Get-Date
@@ -140,7 +147,7 @@ function Vuelta {
     if ($ult -gt [datetime]::MinValue) { $estado[$a].latido = $ult.ToString('yyyy-MM-ddTHH:mm:sszzz') }
     $panelCaido = if ($a -eq 'claude') { -not (Get-Process -Name claude -ErrorAction SilentlyContinue) }
                   else { (Test-Path -LiteralPath $latFile) -and ($ahora - (Get-Item -LiteralPath $latFile).LastWriteTime).TotalSeconds -gt $latidoSeg }
-    if ($panelCaido -and $estado[$a].estado -eq 'libre') {
+    if ($panelCaido -and $estado[$a].estado -eq 'libre' -and -not $script:tolerante) {
       $estado[$a].estado = 'caido'; $estado[$a].motivo = if ($a -eq 'claude') { 'no hay ningún proceso de claude' } else { 'su panel no da latido' }
       $memoria.avisados.PSObject.Properties.Remove("vivo-$a")
       $relanzado = $false
@@ -185,6 +192,12 @@ function Vuelta {
   # Los avisos de más de 7 días se olvidan: la memoria no crece sin límite.
   foreach ($p in @($memoria.avisados.PSObject.Properties)) { if (($ahora - [datetime]::Parse($p.Value)).TotalDays -gt 7) { $memoria.avisados.PSObject.Properties.Remove($p.Name) } }
   Mesa-EscribirJson $rutaMemoria $memoria
+  [IO.File]::WriteAllText($latSup, (Mesa-IsoNow))
+  # Worktrees de la mesa para el tablero: git es lento, así que cada 5 min y no en cada vuelta del tablero.
+  $wtJson = Join-Path $Global:Mesa_Raiz 'worktrees.json'
+  if (-not (Test-Path -LiteralPath $wtJson) -or ((Get-Date) - (Get-Item -LiteralPath $wtJson).LastWriteTime).TotalMinutes -ge 5) {
+    try { [IO.File]::WriteAllText($wtJson, [string](& "$PSScriptRoot\worktrees.ps1" lista -Json), (New-Object Text.UTF8Encoding $false)) } catch {}
+  }
   Rotar 'actividad.jsonl' 5
   Rotar 'alertas.jsonl' 2
   Rotar 'errores-paneles.log' 1
