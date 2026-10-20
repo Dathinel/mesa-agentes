@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="es" data-tema="oscuro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mesa de Agentes · Resumen</title>
+  <link rel="stylesheet" href="resumen.css">
+  <script defer src="resumen.js"></script>
+</head>
+<body>
+
+  <!-- Franja Superior de Frescura y Notificaciones del Sistema -->
+  <header class="franja-superior" id="franja-superior" role="banner">
+    <div class="franja-contenido">
+      <div class="franja-estado">
+        <span class="punto-frescura" id="punto-frescura" aria-hidden="true"></span>
+        <span class="texto-frescura" id="texto-frescura">Comprobando datos...</span>
+        <span class="alerta-trabajador" id="alerta-trabajador" role="alert" hidden></span>
+      </div>
+      <div class="franja-acciones">
+        <button type="button" class="btn-secundario" id="btn-tema" aria-label="Cambiar a tema claro u oscuro">
+          <span id="icono-tema" aria-hidden="true">☀️</span> <span id="texto-tema">Tema Claro</span>
+        </button>
+        <button type="button" class="btn-principal" id="btn-cambiar-vista" aria-label="Cambiar a la vista Oficina Pixel Art">
+          🏢 Ver Oficina Pixel Art
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="contenedor-principal" id="contenido-principal">
+    
+    <!-- Encabezado de la Mesa -->
+    <header class="cabecera-pagina">
+      <div class="cabecera-titulos">
+        <h1 class="titulo-principal">✦ Mesa de Agentes</h1>
+        <p class="subtitulo">Estado ejecutivo del equipo en tiempo real</p>
+      </div>
+      <div class="cabecera-meta">
+        <span class="reloj-vivo" id="reloj-vivo" title="Hora local actual">--:--:--</span>
+      </div>
+    </header>
+
+    <!-- Sección 1: Tarjetas de los tres agentes -->
+    <section class="seccion-agentes" aria-labelledby="titulo-agentes">
+      <div class="seccion-encabezado">
+        <h2 id="titulo-agentes" class="seccion-titulo">Agentes del Equipo</h2>
+        <span class="seccion-bajada">Claude, Codex y agy · Estado de trabajo y liderazgo</span>
+      </div>
+
+      <div class="cuadricula-agentes" id="cuadricula-agentes">
+        <!-- Generado dinámicamente: Tarjetas de Claude, Codex y agy -->
+        <article class="tarjeta-agente tarjeta-cargando" id="tarjeta-claude">
+          <div class="tarjeta-cuerpo"><p>Cargando información de Claude...</p></div>
+        </article>
+        <article class="tarjeta-agente tarjeta-cargando" id="tarjeta-codex">
+          <div class="tarjeta-cuerpo"><p>Cargando información de Codex...</p></div>
+        </article>
+        <article class="tarjeta-agente tarjeta-cargando" id="tarjeta-agy">
+          <div class="tarjeta-cuerpo"><p>Cargando información de agy...</p></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- Sección 2: Te necesito (Atención y bloqueos requeridos por Daniel) -->
+    <section class="seccion-te-necesito" id="seccion-te-necesito" aria-labelledby="titulo-te-necesito">
+      <div class="seccion-encabezado">
+        <div class="te-necesito-titulo-grupo">
+          <span class="icono-atencion" aria-hidden="true">⚠️</span>
+          <h2 id="titulo-te-necesito" class="seccion-titulo">Te necesito</h2>
+          <span class="contador-insignia" id="contador-te-necesito">0</span>
+        </div>
+        <span class="seccion-bajada">Aprobaciones, tareas escaladas, caídas de paneles y alertas prioritarias</span>
+      </div>
+
+      <div class="lista-te-necesito" id="lista-te-necesito">
+        <div class="panel-vacio" id="te-necesito-vacio">
+          <span class="icono-ok" aria-hidden="true">✓</span>
+          <p class="texto-vacio">Todo en orden. No hay bloqueos que requieran tu intervención.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Sección 3: Hilos abiertos -->
+    <section class="seccion-hilos" aria-labelledby="titulo-hilos">
+      <div class="seccion-encabezado">
+        <h2 id="titulo-hilos" class="seccion-titulo">Hilos Abiertos</h2>
+        <span class="seccion-bajada">Coordinación activa, liderazgos y última novedad registrada</span>
+      </div>
+
+      <div class="lista-hilos" id="lista-hilos">
+        <p class="cargando-texto">Cargando conversaciones e hilos...</p>
+      </div>
+    </section>
+
+    <!-- Sección 4: Detalles Técnicos (Oculto por defecto) -->
+    <section class="seccion-detalles" aria-labelledby="titulo-detalles">
+      <div class="detalles-control">
+        <button type="button" class="btn-toggle-detalles" id="btn-toggle-detalles" aria-expanded="false" aria-controls="panel-detalles-tecnicos">
+          <span class="icono-desplegar" id="icono-desplegar" aria-hidden="true">▶</span>
+          <span>Mostrar detalles técnicos (tokens, modelos, caché y telemetría)</span>
+        </button>
+      </div>
+
+      <div class="panel-detalles" id="panel-detalles-tecnicos" hidden>
+        <!-- Telemetría de tokens y cuotas -->
+        <div class="bloque-detalle">
+          <h3 class="detalle-subtitulo">Tokens y Rendimiento de Hoy</h3>
+          <div class="tabla-contenedor">
+            <table class="tabla-metricas" aria-label="Tabla de métricas y tokens por agente">
+              <thead>
+                <tr>
+                  <th scope="col">Agente</th>
+                  <th scope="col">Modelo exacto</th>
+                  <th scope="col">Tokens Hoy</th>
+                  <th scope="col">Tokens 5 h</th>
+                  <th scope="col">Tokens 7 días</th>
+                  <th scope="col">Lectura Caché</th>
+                  <th scope="col">Éxito</th>
+                </tr>
+              </thead>
+              <tbody id="cuerpo-tabla-metricas">
+                <!-- Generado dinámicamente -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Línea de tiempo diaria -->
+        <div class="bloque-detalle">
+          <h3 class="detalle-subtitulo">Línea de Tiempo del Día</h3>
+          <div class="grafico-linea-tiempo" id="grafico-linea-tiempo">
+            <div class="escala-tiempo">
+              <span>00:00</span><span>04:00</span><span>08:00</span><span>12:00</span><span>16:00</span><span>20:00</span><span>24:00</span>
+            </div>
+            <div class="pistas-tiempo" id="pistas-tiempo">
+              <!-- Generado dinámicamente -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Reclamos de archivos activos -->
+        <div class="bloque-detalle">
+          <h3 class="detalle-subtitulo">Reclamos Activos de Archivos</h3>
+          <div class="lista-reclamos" id="lista-reclamos">
+            <!-- Generado dinámicamente -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal para ver el detalle de mensajes de un hilo -->
+  <dialog class="modal-dialog" id="modal-hilo" aria-labelledby="modal-hilo-titulo">
+    <div class="modal-contenido">
+      <div class="modal-cabecera">
+        <div>
+          <h3 class="modal-titulo" id="modal-hilo-titulo">Detalle del Hilo</h3>
+          <p class="modal-subtitulo" id="modal-hilo-subtitulo"></p>
+        </div>
+        <button type="button" class="btn-cerrar-modal" id="btn-cerrar-modal" aria-label="Cerrar ventana modal">✕</button>
+      </div>
+      <div class="modal-cuerpo" id="modal-hilo-mensajes">
+        <p>Cargando mensajes del hilo...</p>
+      </div>
+      <div class="modal-pie">
+        <button type="button" class="btn-secundario" id="btn-cerrar-modal-pie">Cerrar</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Notificación flotante de copiado -->
+  <div class="tostada" id="tostada-aviso" role="status" aria-live="polite" hidden>Orden copiada al portapapeles</div>
+
+</body>
+</html>
