@@ -41,6 +41,9 @@ let hudAgentsOpen = false;
 let hudThreadsOpen = false;
 let activeModalNote = null;
 let abrirPendiente = null; // ?abrir=… espera a la primera lectura
+let tokenMesa = window.__MESA_TOKEN__ || document.querySelector('meta[name="mesa-token"]')?.content || '';
+let lastEtag = null;
+const hilosCargados = new Map();
 
 // Animaciones de personajes y visitas (Items 14 y 15)
 let currentVisitor = null;
@@ -437,6 +440,45 @@ function renderAgents() {
   }).join('');
 }
 
+async function cargarHilo(id) {
+  if (!id) return;
+  const h = data?.hilos?.find(x => x.id === id);
+  if (h && h.mensajes && h._cargado) return h;
+  if (hilosCargados.has(id)) {
+    if (h) { h.mensajes = hilosCargados.get(id); h._cargado = true; }
+    return h;
+  }
+  try {
+    if (!tokenMesa) tokenMesa = window.__MESA_TOKEN__ || document.querySelector('meta[name="mesa-token"]')?.content || '';
+    const headers = {};
+    if (tokenMesa) headers['X-Mesa-Token'] = tokenMesa;
+    const r = await fetch('/api/hilo?id=' + encodeURIComponent(id), { headers });
+    if (r.ok) {
+      const res = await r.json();
+      if (res && res.mensajes) {
+        hilosCargados.set(id, res.mensajes);
+        if (h) { h.mensajes = res.mensajes; h._cargado = true; }
+        if (selected === id) {
+          const chatEl = $('chat');
+          if (chatEl) {
+            chatEl.innerHTML = res.mensajes.map(m => `
+              <article class="chat-message">
+                <div class="chat-meta">
+                  <b>${esc(m.autor)}</b> → ${esc(m.para)}
+                  <time>${hour(m.fecha)}</time>
+                </div>
+                <p>${esc(m.texto)}</p>
+              </article>
+            `).join('') || '<p class="empty">Conversación del hilo.</p>';
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Error cargando hilo', id, e);
+  }
+}
+
 function renderThreads() {
   const h = activeThread(), list = data?.hilos || [];
   selected = h?.id || null;
@@ -451,6 +493,9 @@ function renderThreads() {
     `).join('') || '<div class="empty">Sin hilos.</div>';
   }
   if (chatEl) {
+    if (h && (!h.mensajes || !h._cargado) && hudThreadsOpen) {
+      cargarHilo(h.id);
+    }
     chatEl.innerHTML = (h?.mensajes || []).map(m => `
       <article class="chat-message">
         <div class="chat-meta">
@@ -459,7 +504,7 @@ function renderThreads() {
         </div>
         <p>${esc(m.texto)}</p>
       </article>
-    `).join('') || '<p class="empty">Conversación del hilo.</p>';
+    `).join('') || '<p class="empty">' + (hudThreadsOpen && h && !h._cargado ? 'Cargando conversación...' : 'Conversación del hilo.') + '</p>';
   }
 
   const pending = data?.pendientes || [];
@@ -957,8 +1002,20 @@ function closeInteractiveModal() {
 // =========================================================================
 async function refresh() {
   try {
-    const r = await fetch('/api/estado', { cache: 'no-store' });
+    if (!tokenMesa) tokenMesa = window.__MESA_TOKEN__ || document.querySelector('meta[name="mesa-token"]')?.content || '';
+    const headers = { 'Cache-Control': 'no-cache' };
+    if (tokenMesa) headers['X-Mesa-Token'] = tokenMesa;
+    if (lastEtag) headers['If-None-Match'] = lastEtag;
+    const r = await fetch('/api/estado', { headers });
+    if (r.status === 304) {
+      $('connection').textContent = 'Mesa conectada';
+      $('connection-dot').style.background = 'var(--teal)';
+      refreshFallos = 0;
+      return;
+    }
     if (!r.ok) throw Error('HTTP ' + r.status);
+    const etag = r.headers.get('ETag');
+    if (etag) lastEtag = etag;
     const next = await r.json();
     const prev = data;
     if (demoModo) ajustarDemo(next);
@@ -2256,7 +2313,7 @@ function drawMeetingRoom(L, t, now) {
     const hAct = activeThread();
     fitText('SALA LIBRE', x + w / 2, py + 17, pw - 16, 7.5, '#6ee7b7', 'center', true);
     fitText(ultimaReunion ? `Última: ${ETIQUETA_REUNION[ultimaReunion.tipo]} · ${ultimaReunion.tema}` : `Hilo activo: ${hAct?.titulo || '—'}`, x + w / 2, py + 32, pw - 16, 6.5, '#fef08a', 'center');
-    fitText(`♛ Líder: ${hAct?.lider || '—'} · ${(hAct?.mensajes || []).length} mensajes`, x + w / 2, py + 46, pw - 16, 6, '#94a3b8', 'center');
+    fitText(`♛ Líder: ${hAct?.lider || '—'} · ${hAct?.conteo_mensajes ?? (hAct?.mensajes || []).length} mensajes`, x + w / 2, py + 46, pw - 16, 6, '#94a3b8', 'center');
   }
 
   // Quién está sentado (los que aún andan se dibujan encima de la planta).
@@ -2416,14 +2473,14 @@ function drawCommonArea(L, t, now) {
 // Lo que guarda el archivo, por cajón: hilos cerrados, encargos hechos y alertas.
 function hiloCerrado(h) {
   if (['cerrado', 'hecho', 'concluido', 'archivado'].includes(String(h.estado || '').toLowerCase())) return true;
-  const u = (h.mensajes || []).at(-1);
+  const u = h.ultimo_mensaje || (h.mensajes || []).at(-1);
   return !!u && u.tipo === 'respuesta' && ['hecho', 'fallo'].includes(u.estado);
 }
 const fechaCorta = v => { const d = new Date(v); return isNaN(d) ? '—' : d.toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }); };
 function archivoDatos() {
   const hilos = (data?.hilos || []).filter(hiloCerrado).map(h => {
-    const u = (h.mensajes || []).at(-1);
-    return { tag: (u?.estado || h.estado || 'cerrado').toUpperCase(), titulo: h.titulo || h.id, sub: `Líder: ${h.lider || '—'} · ${fechaCorta(h.actualizado || u?.fecha)} · ${(h.mensajes || []).length} mensajes`, orden: Date.parse(h.actualizado || u?.fecha || '') || 0 };
+    const u = h.ultimo_mensaje || (h.mensajes || []).at(-1);
+    return { tag: (u?.estado || h.estado || 'cerrado').toUpperCase(), titulo: h.titulo || h.id, sub: `Líder: ${h.lider || '—'} · ${fechaCorta(h.actualizado || u?.fecha)} · ${h.conteo_mensajes ?? (h.mensajes || []).length} mensajes`, orden: Date.parse(h.actualizado || u?.fecha || '') || 0 };
   });
   const vistosE = new Set(), encargos = [];
   for (const a of data?.agentes || []) for (const x of a.archivados || []) {
@@ -2673,6 +2730,7 @@ document.addEventListener('click', async e => {
       hudThreadsOpen = !hudThreadsOpen;
       $('hud-threads-panel').hidden = !hudThreadsOpen;
       btn.classList.toggle('active', hudThreadsOpen);
+      if (hudThreadsOpen && selected) cargarHilo(selected);
       return;
     }
     if (btn.id === 'btn-close-threads') {
@@ -2713,6 +2771,7 @@ document.addEventListener('click', async e => {
     }
     if (btn.dataset.thread) {
       selected = btn.dataset.thread;
+      cargarHilo(selected);
       renderThreads();
       const h = data?.hilos?.find(x => x.id === selected);
       const quienes = [...new Set((h?.participantes || []).map(norm).filter(id => ids.includes(id)))];

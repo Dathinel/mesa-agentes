@@ -110,10 +110,23 @@
     }
   }
 
+  let tokenReclamos = window.__MESA_TOKEN__ || document.querySelector('meta[name="mesa-token"]')?.content || '';
+  let lastEtagReclamos = null;
   async function refrescar() {
     try {
-      const r = await fetch('/api/estado', { cache: 'no-store' });
-      if (r.ok) pintar(await r.json());
+      if (!tokenReclamos) {
+        tokenReclamos = window.__MESA_TOKEN__ || document.querySelector('meta[name="mesa-token"]')?.content || '';
+      }
+      const headers = { 'Cache-Control': 'no-cache' };
+      if (tokenReclamos) headers['X-Mesa-Token'] = tokenReclamos;
+      if (lastEtagReclamos) headers['If-None-Match'] = lastEtagReclamos;
+      const r = await fetch('/api/estado', { headers });
+      if (r.status === 304) return;
+      if (r.ok) {
+        const etag = r.headers.get('ETag');
+        if (etag) lastEtagReclamos = etag;
+        pintar(await r.json());
+      }
     } catch {}
   }
 

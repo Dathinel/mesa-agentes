@@ -57,7 +57,7 @@ function Estado-ClaseComando([string]$Cmd) {
 function Claude-Carpetas($cfg) {
   $raiz = Join-Path $env:USERPROFILE '.claude\projects'
   $patrones = @($cfg.claude_proyectos | Where-Object { $_ })
-  if (!$patrones.Count) { $patrones = @('D--Programas-de-uso-libre*') }
+  if (!$patrones.Count) { $patrones = @((($mesaBase -replace '[^A-Za-z0-9]', '-') + '*')) }
   @(Get-ChildItem -LiteralPath $raiz -Directory -ErrorAction SilentlyContinue | Where-Object {
     $n = $_.Name
     $n -notmatch $Global:Mesa_Excluidos -and @($patrones | Where-Object { $n -like $_ }).Count -gt 0
@@ -428,7 +428,7 @@ function Obtener-EstadoCompleto {
   $reg=@(Mesa-RegistroLocal $Global:Mesa_Registro | Where-Object { $_.calidad -ne 'simulado' })
   $archivos=@(Mesa-Actividades 24)
   # El archivador muestra 80 alertas; acotar también ráfagas dentro de las 72 horas.
-  $alertas=@(Mesa-Alertas 72 | Sort-Object { [DateTimeOffset]::Parse($_.hora) } -Descending | Select-Object -First 80 | Select-Object id,agente,hora,nivel,motivo,revisada)
+  $alertas=@(Mesa-Alertas 72 | Sort-Object { [DateTimeOffset]::Parse($_.hora) } -Descending | Select-Object -First 10 | Select-Object id,agente,hora,nivel,motivo,revisada)
   $acciones7=@(Estado-Acciones $now.Date.AddDays(-6))
   $usoClaude=Estado-ClaudeUso
   $horasCodex=Estado-CodexHoras
@@ -625,18 +625,18 @@ function Obtener-EstadoCompleto {
             para = $m.para
             hora = $m.fecha
             resumen = $resumen
-            hecho = $hechoReal
-            falta = if ($m.traspaso.falta) { $m.traspaso.falta } else { 'Ninguna' }
+            hecho = if ($hechoReal -and $hechoReal.Length -gt 250) { $hechoReal.Substring(0, 247) + '...' } else { $hechoReal }
+            falta = if ($m.traspaso.falta) { $fal = [string]$m.traspaso.falta; if ($fal.Length -gt 150) { $fal.Substring(0, 147) + '...' } else { $fal } } else { 'Ninguna' }
             hilo = $hi.id
             titulo = $hi.titulo
-            archivos = @($m.traspaso.archivos)
+            archivos = @($m.traspaso.archivos | Select-Object -First 5)
             tipo = if ($esIncidencia) { 'incidencia' } else { 'traspaso' }
           }
         }
       }
     }
     # Ordenar: traspasos normales primero, incidencias señaladas
-    $carpetas = @($carpetas | Sort-Object { if ($_.tipo -eq 'incidencia') { 1 } else { 0 } } | Select-Object -First 6)
+    $carpetas = @($carpetas | Sort-Object { if ($_.tipo -eq 'incidencia') { 1 } else { 0 } } | Select-Object -First 4)
 
     $archivados = @()
     foreach ($hi in $hilos) {
@@ -649,7 +649,7 @@ function Obtener-EstadoCompleto {
             titulo = $tit
             autor = $m.autor
             hora = $m.fecha
-            hecho = if ($m.traspaso.hecho) { $m.traspaso.hecho } else { $m.texto }
+            hecho = if ($m.traspaso.hecho) { $h = [string]$m.traspaso.hecho; if ($h.Length -gt 120) { $h.Substring(0, 117) + '...' } else { $h } } else { $t = [string]$m.texto; if ($t.Length -gt 120) { $t.Substring(0, 117) + '...' } else { $t } }
           }
         }
       }
@@ -783,19 +783,21 @@ function Obtener-EstadoCompleto {
 
   $ganador=@($agentes | Where-Object { $_.estadisticas.exitos7 -gt 0 } | Sort-Object { $_.estadisticas.exitos7 } -Descending | Select-Object -First 1)
   return @{
-    actualizado=(Mesa-IsoNow)
+    actualizado=if ($hilos -and $hilos.Count -and $hilos[0].actualizado) { $hilos[0].actualizado } else { (Mesa-IsoNow) }
     agentes=$agentes
-    # La oficina muestra una ventana del chat; los cálculos anteriores usan el historial completo.
+    # Resumen de hilos sin mensajes para descarga ligera; el detalle va en /api/hilo?id=<id>.
     hilos=@(foreach ($hi in $hilos) {
-      $vista = $hi | Select-Object id,titulo,lider,participantes,estado,actualizado
-      $vista | Add-Member mensajes @(foreach ($m in @($hi.mensajes | Select-Object -Last 30)) {
-        $texto = Mesa-Ocultar ([string]$m.texto)
-        if ($texto.Length -gt 2000) { $texto = $texto.Substring(0,1997) + '...' }
-        [ordered]@{ n=$m.n; autor=$m.autor; para=$m.para; fecha=$m.fecha; texto=$texto; tipo=$m.tipo; estado=$m.estado; traspaso=if ($m.traspaso) { @{} } else { $null } }
-      })
-      $vista
+      $u = if ($hi.mensajes -and $hi.mensajes.Count) { $hi.mensajes[-1] } else { $null }
+      $uTexto = if ($u) { Mesa-Ocultar ([string]$u.texto) } else { '' }
+      if ($uTexto.Length -gt 90) { $uTexto = $uTexto.Substring(0, 87) + '...' }
+      [ordered]@{
+        id = $hi.id; titulo = $hi.titulo; lider = $hi.lider; participantes = $hi.participantes
+        estado = $hi.estado; actualizado = $hi.actualizado
+        conteo_mensajes = if ($hi.mensajes) { $hi.mensajes.Count } else { 0 }
+        ultimo_mensaje = if ($u) { [ordered]@{ tipo = $u.tipo; estado = $u.estado; fecha = $u.fecha; autor = $u.autor; texto = $uTexto } } else { $null }
+      }
     })
-    pendientes=$pendientes
+    pendientes=@(foreach ($p in $pendientes) { $t = Mesa-Ocultar ([string]$p.texto); if ($t.Length -gt 180) { $t = $t.Substring(0, 177) + '...' }; [ordered]@{ autor=$p.autor; para=$p.para; texto=$t; traspaso=if ($p.traspaso) { [ordered]@{ falta=$p.traspaso.falta } } else { $null } } })
     cuota=$cuota
     catalogo=$catalogo
     alertas=$alertas

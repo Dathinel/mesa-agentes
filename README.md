@@ -9,7 +9,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/licencia-MIT-E8833A?style=flat-square&labelColor=1D1D1D" alt="Licencia MIT"></a>
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-E8833A?style=flat-square&labelColor=1D1D1D" alt="Windows 10 y 11">
   <img src="https://img.shields.io/badge/PowerShell-5.1-E8833A?style=flat-square&labelColor=1D1D1D&logo=powershell&logoColor=white" alt="PowerShell 5.1">
-  <img src="https://img.shields.io/badge/pruebas_de_caos-20%2F20-E8833A?style=flat-square&labelColor=1D1D1D" alt="Pruebas de caos 20 de 20">
+  <img src="https://img.shields.io/badge/pruebas_de_caos-21%2F21-E8833A?style=flat-square&labelColor=1D1D1D" alt="Pruebas de caos 21 de 21">
 </p>
 
 ## Qué necesitas

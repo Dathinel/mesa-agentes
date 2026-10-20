@@ -9,7 +9,7 @@ title Mesa de agentes - pruebas
 set "P=%~dp0pruebas"
 set "PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
 set FALLOS=0
-for %%T in (caos caos-procesos probar-relevo probar-vigia-ambito probar-oficina) do (
+for %%T in (caos caos-procesos probar-relevo probar-vigia-ambito probar-oficina probar-panel) do (
   if /i "%~1"=="" call :una %%T
   if /i "%~1"=="caos" if /i "%%T"=="caos" call :una %%T
 )

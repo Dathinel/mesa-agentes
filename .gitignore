@@ -13,7 +13,6 @@ docs/historial/
 docs/interno/
 
 # Restos de ejecución.
-panel/puerto.txt
 *.log
 *.pid
 *.tmp.*
@@ -22,4 +21,3 @@ panel/puerto.txt
 /CLAUDE.md
 /AGENTS.md
 /GEMINI.md
-panel/token.txt

@@ -56,7 +56,9 @@ echo   Archivando reclamos caducados y restos de la sesión anterior...
 echo   Arrancando el supervisor (sin modelo, en segundo plano)...
 start "" /B %PSA% -WindowStyle Hidden -File "%H%\supervisor.ps1"
 
-set "PUERTO_FILE=%MESA%\panel\puerto.txt"
+set "DATOS=%MESA%\datos"
+if defined MESA_DATOS set "DATOS=%MESA_DATOS%"
+set "PUERTO_FILE=%DATOS%\puerto.txt"
 set PUERTO=
 set ACTIVO=0
 if exist "%PUERTO_FILE%" set /p PUERTO=<"%PUERTO_FILE%"
