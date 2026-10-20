@@ -16,6 +16,7 @@ if ($Simular) { $env:MESA_SIMULAR = '1' } elseif ($env:MESA_SIMULAR -eq '1') { $
 $ErrorActionPreference = 'Continue'
 . "$PSScriptRoot\comun.ps1"
 . "$PSScriptRoot\costes.ps1"
+. "$PSScriptRoot\proceso.ps1"
 
 $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' +
             [Environment]::GetEnvironmentVariable('Path','User') +
@@ -47,12 +48,6 @@ function Mostrar-Linea([string]$l) {
     if ($it.command -and $o.type -notlike '*completed*') { Write-Host "`n  ▶ $(& $corto (@($it.command) -join ' '))" -ForegroundColor Cyan }
     elseif ($it.type -in @('agent_message', 'assistant_message') -and ($it.text -or $it.message)) { Write-Host "`n$(if ($it.text) { $it.text } else { $it.message })" }
   }
-}
-
-filter Ver-Y-Guardar([string]$logPath) {
-  $l = [string]$_
-  [IO.File]::AppendAllText($logPath, $l + [Environment]::NewLine, (New-Object System.Text.UTF8Encoding $false))
-  Mostrar-Linea $l
 }
 
 function Resolver-RutaEncargo($encargo, $dirBase) {
@@ -223,13 +218,9 @@ function Ejecutar-Mensaje($carpetaHilo, $archivoMsg) {
     $promptTexto = "REINTENTO $intentos`: tu intento anterior de este encargo quedó cortado. Antes de nada revisa el hilo (mesa.ps1 leer -Hilo $hiloId), tu reclamo y git status; no repitas pasos ya hechos.`n" +
       $(if ($avances.Count) { "Tus últimos puntos de control:`n$($avances -join "`n")`n" } else { "No dejaste puntos de control.`n" }) + "`n$promptTexto"
   }
-  # Sin esto el agente atribuía a Daniel lo que manda el líder.
+  # Identifica al autor para distinguir al líder del usuario.
   $promptTexto = "[Mesa de agentes · de $($m.autor) para $($m.para) · hilo $hiloId #$($m.n)]`n$promptTexto"
   [IO.File]::WriteAllText($promptTmp, $promptTexto, (New-Object System.Text.UTF8Encoding $false))
-  # PowerShell 5.1 no escapa las comillas al pasar un argumento a un .exe: un encargo con "…" llegaba partido.
-  # Regla de Windows: las barras solo cuentan justo antes de una comilla (o al final, que PowerShell cierra con comilla).
-  $promptArg = [regex]::Replace($promptTexto, '(\\*)"', { param($c) ($c.Groups[1].Value * 2) + '\"' })
-  $promptArg = [regex]::Replace($promptArg, '(\\+)$', { param($c) $c.Groups[1].Value * 2 })
 
   $inicioDt  = Get-Date
   $muestraAntes = if (!$Simular) { Mesa-MuestraSesion $herramienta ([datetime]::MinValue) $workDir } else { @{} }
@@ -242,14 +233,28 @@ function Ejecutar-Mensaje($carpetaHilo, $archivoMsg) {
     $m.estado  = 'ejecutando'
     # pid: el supervisor distingue así un encargo vivo de uno huérfano (proceso muerto).
     $intentoId = [Guid]::NewGuid().ToString('N').Substring(0, 12)
-    $m.llamada = [ordered]@{ inicio = $inicioIso; fin = $null; salida = $null; log = $logPath; pid = $PID; intento = $intentoId }
+    $yoProc = Get-Process -Id $PID
+    $m.llamada = [ordered]@{ inicio = $inicioIso; fin = $null; salida = $null; log = $logPath; pid = $PID; pid_inicio = $yoProc.StartTime.ToUniversalTime().ToString('o'); pid_nombre = $yoProc.ProcessName; intento = $intentoId }
     Mesa-EscribirJson $archivoMsg $m
   } finally { $candado.Dispose() }
   # Qué encargo corre ahora en este proceso: «cortar» solo actúa si coincide, así no mata el encargo siguiente del mismo panel.
   $enCurso = Join-Path $Global:Mesa_Raiz "agentes\en-curso-$PID.json"
-  Mesa-EscribirJson $enCurso ([ordered]@{ hilo = $hiloId; n = [int]$m.n; intento = $intentoId; inicio = $inicioIso })
+  $estadoCurso = [ordered]@{ hilo = $hiloId; n = [int]$m.n; pid = $PID; intento = $intentoId; inicio = $inicioIso }
+  Mesa-EscribirJson $enCurso $estadoCurso
 
   $codigoSalida = 0
+  $resultadoProceso = $null
+  $identidadCli = @{}
+  $alIniciar = {
+    param($identidad)
+    foreach ($campo in @('cli_pid', 'cli_inicio', 'cli_nombre')) {
+      $identidadCli[$campo] = $identidad.$campo
+      $m.llamada[$campo] = $identidad.$campo
+      $estadoCurso[$campo] = $identidad.$campo
+    }
+    $candadoCli = Mesa-BloquearHilo $carpetaHilo
+    try { Mesa-EscribirJson $archivoMsg $m; Mesa-EscribirJson $enCurso $estadoCurso } finally { $candadoCli.Dispose() }
+  }
   if ($Simular) {
     $simResp = "Respuesta simulada de $($m.para) ($herramienta/$modelo) al mensaje #$($m.n) en $hiloId."
     if ($herramienta -eq 'codex') {
@@ -263,48 +268,30 @@ function Ejecutar-Mensaje($carpetaHilo, $archivoMsg) {
     try {
       switch ($herramienta) {
         'codex' {
-          $archivoEntrada = if ($rutaEncargo -and (Test-Path -LiteralPath $rutaEncargo) -and -not $m.texto) { $rutaEncargo } else { $promptTmp }
           # resume no admite -C/-s/--add-dir: el directorio lo da Push-Location y el sandbox, la configuración.
           $argsCodex = if ($Sesion) { @('exec', 'resume', $Sesion, '--skip-git-repo-check', '-c', 'sandbox_mode=workspace-write') }
                        else { @('exec', '--skip-git-repo-check', '-C', $workDir, '-s', 'workspace-write', '--add-dir', $Global:Mesa_DefaultDir) }
-          # Red dentro del sandbox: autorizada por Daniel el 18-oct (git, gh y delegar en otros agentes la necesitan).
+          # Git y las delegaciones necesitan red dentro del sandbox.
           $argsCodex += @('-c', 'sandbox_workspace_write.network_access=true', '--json', '-m', $modelo, '-c', "model_reasoning_effort=`"$esfuerzo`"", '-o', $finalTxt, '-')
-          Push-Location -LiteralPath $workDir
-          try {
-            if ($Ver) {
-              [IO.File]::WriteAllText($logPath, '')
-              Get-Content -Raw -Encoding UTF8 -LiteralPath $archivoEntrada | & codex @argsCodex 2>&1 | Ver-Y-Guardar $logPath
-            } else {
-              Get-Content -Raw -Encoding UTF8 -LiteralPath $archivoEntrada | & codex @argsCodex *> $logPath
-            }
-            $codigoSalida = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
-          } finally { Pop-Location }
+          $cli = 'codex'; $argumentosCli = $argsCodex; $entradaCli = $promptTexto
         }
         'agy' {
           $agyCmd = if (Test-Path "$env:LOCALAPPDATA\agy\bin\agy.exe") { "$env:LOCALAPPDATA\agy\bin\agy.exe" } else { 'agy' }
-          Push-Location -LiteralPath $workDir
-          try {
-            $sigue = if ($Sesion) { @('--conversation', $Sesion) } else { @() }
-            # 'auto' no está disponible en esta cuenta y agy caía al modo por defecto; accept-edits sí (Daniel, 18-oct).
-            if ($Ver) { [IO.File]::WriteAllText($logPath, ''); & $agyCmd -p $promptArg @sigue --model $modelo --mode accept-edits --output-format stream-json 2>&1 | Ver-Y-Guardar $logPath }
-            else { & $agyCmd -p $promptArg @sigue --model $modelo --mode accept-edits --output-format json *> $logPath }
-            $codigoSalida = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
-          } finally {
-            Pop-Location
-          }
+          $sigue = if ($Sesion) { @('--conversation', $Sesion) } else { @() }
+          # agy -p exige un argumento y no consume stdin en modo texto.
+          $instruccion = "Lee el encargo completo en el archivo UTF-8 $promptTmp y ejecuta sus instrucciones."
+          $cli = $agyCmd; $entradaCli = ''
+          $argumentosCli = @('-p', $instruccion) + $sigue + @('--model', $modelo, '--mode', 'accept-edits', '--output-format', $(if ($Ver) { 'stream-json' } else { 'json' }))
         }
         'claude' {
-          Push-Location -LiteralPath $workDir
-          try {
-            $sigue = if ($Sesion) { @('--resume', $Sesion) } else { @() }
-            if ($Ver) { [IO.File]::WriteAllText($logPath, ''); & claude -p $promptArg @sigue --model $modelo --output-format stream-json --verbose 2>&1 | Ver-Y-Guardar $logPath }
-            else { & claude -p $promptArg @sigue --model $modelo --output-format json *> $logPath }
-            $codigoSalida = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
-          } finally {
-            Pop-Location
-          }
+          $sigue = if ($Sesion) { @('--resume', $Sesion) } else { @() }
+          $cli = 'claude'; $entradaCli = $promptTexto
+          $argumentosCli = @('-p') + $sigue + @('--model', $modelo, '--output-format', $(if ($Ver) { 'stream-json' } else { 'json' }))
+          if ($Ver) { $argumentosCli += '--verbose' }
         }
       }
+      $resultadoProceso = Invocar-ProcesoMesa -Ejecutable $cli -Argumentos $argumentosCli -Entrada $entradaCli -Directorio $workDir -Log $logPath -Segundos (Mesa-LimiteSegundos $cfg $hiloId) -Ver:$Ver -AlIniciar $alIniciar
+      $codigoSalida = [int]$resultadoProceso.salida
     } catch {
       [IO.File]::AppendAllText($logPath, "`nERROR: $($_.Exception.Message)", (New-Object System.Text.UTF8Encoding $false))
       $codigoSalida = 1
@@ -356,10 +343,11 @@ function Ejecutar-Mensaje($carpetaHilo, $archivoMsg) {
   $cola = if (Test-Path -LiteralPath $logPath) { $t = [IO.File]::ReadAllText($logPath); $t.Substring([Math]::Max(0, $t.Length - 4000)) } else { '' }
   # Un «status: ERROR» es fallo aunque el CLI salga con 0; la causa solo lo clasifica.
   if ($codigoSalida -eq 0 -and $cola -match '"status"\s*:\s*"(ERROR|RESOURCE_EXHAUSTED)"') { $codigoSalida = 1 }
-  $causa = if ($codigoSalida -ne 0) { Mesa-CausaFallo $cola } else { $null }
+  $causa = if ($resultadoProceso.causa -eq 'tiempo') { [pscustomobject]@{ causa = 'tiempo'; hasta = $null } } elseif ($codigoSalida -ne 0) { Mesa-CausaFallo $cola } else { $null }
   $estadoFinal = if ($codigoSalida -eq 0) { 'hecho' } else { 'fallo' }
   $m.estado = $estadoFinal
-  $m.llamada = [ordered]@{ inicio = $inicioIso; fin = $finIso; salida = [int]$codigoSalida; log = $logPath; pid = $PID; intento = $intentoId; causa = $causa.causa; hasta = $causa.hasta }
+  $m.llamada = [ordered]@{ inicio = $inicioIso; fin = $finIso; salida = [int]$codigoSalida; log = $logPath; pid = $PID; pid_inicio = $yoProc.StartTime.ToUniversalTime().ToString('o'); pid_nombre = $yoProc.ProcessName; intento = $intentoId; causa = $causa.causa; hasta = $causa.hasta }
+  foreach ($campo in $identidadCli.Keys) { $m.llamada[$campo] = $identidadCli[$campo] }
   if (-not $m.traspaso) {
     $m | Add-Member -NotePropertyName traspaso -NotePropertyValue ([ordered]@{ hecho = $datos.texto; falta = ''; archivos = @($logPath) }) -Force
   } else {

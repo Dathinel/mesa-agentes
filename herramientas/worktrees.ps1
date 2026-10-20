@@ -1,4 +1,4 @@
-﻿# Un worktree por agente y tarea, con la regla de Rodaje para todos los repos: <repo>\.claude\worktrees\<agente>-<tarea>,
+﻿# Un worktree por agente y tarea, con la misma regla en todos los repos: <repo>\.claude\worktrees\<agente>-<tarea>,
 # rama <agente>/<tarea>, creado desde la rama principal actualizada. Solo en carpetas que son repositorios git.
 # Uso:
 #   worktrees.ps1 crear -Dir <carpeta del repo> -Agente codex -Tarea <id>     (escribe la ruta del worktree)

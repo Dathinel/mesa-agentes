@@ -167,6 +167,13 @@ try {
   $arch = @(Get-ChildItem -Path (Join-Path $raiz 'archivo') -Recurse -Directory -Filter $viejo).Count
   Caso 'Archivar hilos cerrados de más de 30 días' 'el de 40 días pasa a archivo con su hilo.json; el de 2 días y el abierto se quedan' "archivado=$arch, viejo en hilos=$(Test-Path (Join-Path $Global:Mesa_Hilos $viejo)), reciente=$(Test-Path (Join-Path $Global:Mesa_Hilos $reciente)), abierto=$(Test-Path (Join-Path $Global:Mesa_Hilos $hilo))" ($arch -eq 1 -and -not (Test-Path (Join-Path $Global:Mesa_Hilos $viejo)) -and (Test-Path (Join-Path $Global:Mesa_Hilos $reciente)) -and (Test-Path (Join-Path $Global:Mesa_Hilos $hilo)))
 
+  # 17. PID reutilizado: el PID del encargo está vivo, pero es otro proceso (otra hora de inicio): el supervisor lo da por huérfano.
+  $n17 = Encargo $hilo codex
+  $yo = Get-Process -Id $PID
+  Poner $hilo $n17 { param($m) $m.estado = 'ejecutando'; $m.llamada = [pscustomobject]@{ inicio = (Mesa-IsoNow); fin = $null; salida = $null; log = $null; pid = $PID; pid_inicio = $yo.StartTime.AddMinutes(-90).ToUniversalTime().ToString('o'); pid_nombre = $yo.ProcessName; intento = 'x' } }
+  Supervisar
+  Caso 'PID reutilizado' 'mismo PID vivo pero otra hora de inicio: huérfano' "estado=$((Msg $hilo $n17).estado)" ((Msg $hilo $n17).estado -eq 'huerfano')
+
   # 10. El líder deja de responder: relevo del liderazgo por otro panel (prueba existente).
   $relevo = & "$PSScriptRoot\probar-relevo.ps1" 2>&1 | Select-Object -Last 1
   Caso 'Arriendo del líder caduca' 'otro agente toma el liderazgo (probar-relevo.ps1)' "$relevo" ($relevo -match 'fallos=0')

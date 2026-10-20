@@ -9,6 +9,8 @@ datos/reclamos/*
 # Copias de versiones anteriores, historial de encargos y capturas de trabajo.
 anteriores/
 docs/historial/
+# Diagnóstico y descripción de una instalación concreta, y capturas con datos reales.
+docs/interno/
 
 # Restos de ejecución.
 panel/puerto.txt

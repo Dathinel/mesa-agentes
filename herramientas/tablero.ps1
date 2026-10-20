@@ -59,7 +59,7 @@ do {
     $latSup = Join-Path $Global:Mesa_Raiz 'agentes\supervisor.latido'
     $edadSup = if (Test-Path -LiteralPath $latSup) { ($ahora - [DateTimeOffset](Get-Item -LiteralPath $latSup).LastWriteTime).TotalSeconds } else { -1 }
     $apr = Mesa-Aprobacion (Leer (Mesa-ConfigPath))
-    if ($edadSup -lt 0 -or $edadSup -gt 90) { Linea ("Supervisor: PARADO $(if ($edadSup -ge 0) { '(último latido ' + (Antiguedad (Get-Item -LiteralPath $latSup).LastWriteTime.ToString('o')) + ')' }) · ábrelo con Mesa.bat") 'Red' }
+    if ($edadSup -lt 0 -or $edadSup -gt 90) { Linea ("Supervisor: PARADO $(if ($edadSup -ge 0) { '(último latido ' + (Antiguedad (Get-Item -LiteralPath $latSup).LastWriteTime.ToString('o')) + ')' }) · ábrelo con Cuadrilla.bat") 'Red' }
     else { Linea ("Supervisor: vivo ({0}) · aprobación: {1} (sin esperar: {2})" -f (Antiguedad (Get-Item -LiteralPath $latSup).LastWriteTime.ToString('o')), $apr.modo, ($apr.tipos -join ', ')) 'Gray' }
     Linea 'Agentes'
     foreach ($agente in @('claude', 'codex', 'agy')) {

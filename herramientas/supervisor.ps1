@@ -37,7 +37,7 @@ function Avisar($titulo, $texto) {
     [void][Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime]
     $xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
     $t = $xml.GetElementsByTagName('text')
-    [void]$t.Item(0).AppendChild($xml.CreateTextNode("Mesa · $titulo"))
+    [void]$t.Item(0).AppendChild($xml.CreateTextNode("Cuadrilla · $titulo"))
     [void]$t.Item(1).AppendChild($xml.CreateTextNode($texto))
     [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe').Show([Windows.UI.Notifications.ToastNotification]::new($xml))
   } catch {}
@@ -94,7 +94,8 @@ function Vuelta {
         $log = $m.llamada.log
         $logEdad = if ($log -and (Test-Path -LiteralPath $log)) { ($ahora - (Get-Item -LiteralPath $log).LastWriteTime).TotalMinutes } else { ($ahora - [datetime]::Parse($m.llamada.inicio)).TotalMinutes }
         $tienePid = $m.llamada.PSObject.Properties['pid'] -and $m.llamada.pid
-        $muerto = if ($tienePid) { -not (Vivo $m.llamada.pid) } else { $logEdad -gt 120 }
+        # Con identidad (PID + hora de inicio + nombre) un PID reutilizado por otro proceso no pasa por vivo.
+        $muerto = if ($tienePid -and $m.llamada.PSObject.Properties['pid_inicio']) { -not (Mesa-ProcesoVivo $m.llamada.pid $m.llamada.pid_inicio $m.llamada.pid_nombre) } elseif ($tienePid) { -not (Vivo $m.llamada.pid) } else { $logEdad -gt 120 }
         $clave = "$($d.Name)#$($m.n)"
         $intento = "$($m.llamada.inicio)"
         if ($muerto) {
@@ -164,7 +165,7 @@ function Vuelta {
         $tarea = @(Mesa-Reclamos | Where-Object { (Mesa-NormalizarHerramienta $_.agente) -eq $a -and $_.tarea -ne 'lider' } | Select-Object -First 1)
         $hilo = if ($tarea.Count) { $tarea[0].hilo }
         $lider = if ($hilo) { (Mesa-LeerMensaje (Join-Path (Join-Path $Global:Mesa_Hilos $hilo) 'hilo.json')).lider }
-        $necesito = if ($a -eq 'claude') { 'que abras claude (Mesa.bat lo reanuda con --continue)' } else { "que lo reabras con: Mesa.bat panel $a" }
+        $necesito = if ($a -eq 'claude') { 'que abras claude (Cuadrilla.bat lo reanuda con --continue)' } else { "que lo reabras con: Cuadrilla.bat panel $a" }
         Informar "caido-$a-$(Get-Date -Format 'yyyyMMdd')" $memoria $hilo $lider "el panel de $a se cayó ($($estado[$a].motivo))$(if ($tarea.Count) { " con la tarea $($tarea[0].tarea)" })" `
           $(if ($relanzar) { "no lo relancé: ya van $maxRelanzar intentos en $ventanaMin min" } else { 'nada: el relanzado automático está apagado en mesa.json' }) $necesito
       }

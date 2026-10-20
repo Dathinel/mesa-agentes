@@ -89,6 +89,16 @@ function Mesa-IsoNow {
   (Get-Date).ToString('yyyy-MM-ddTHH:mm:sszzz')
 }
 
+function Mesa-ProcesoVivo {
+  param([Alias('pid')][int]$procesoId, [string]$inicio, [string]$nombre)
+  if ($procesoId -le 0 -or -not $inicio -or -not $nombre) { return $false }
+  try {
+    $proceso = Get-Process -Id $procesoId -ErrorAction Stop
+    return (-not $proceso.HasExited -and $proceso.ProcessName -eq $nombre -and
+      $proceso.StartTime.ToUniversalTime().Ticks -eq [datetime]::Parse($inicio).ToUniversalTime().Ticks)
+  } catch { return $false }
+}
+
 function Mesa-ConfigPath($customPath = $null) {
   if ($customPath) { return $customPath }
   if ($env:MESA_CONFIG) { return $env:MESA_CONFIG }

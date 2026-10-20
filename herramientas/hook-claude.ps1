@@ -9,6 +9,8 @@ try {
   $ahora = Get-Date
   $lineas = @(Mesa-Novedades 'claude' $desde 300 3>$null | Select-Object -Last 8)
   if ($Evento -eq 'inicio') {
+    # Claude pasa por stdin el id de la sesión: Cuadrilla.bat lo usa para reanudar esta conversación y no la última de la carpeta.
+    if ([Console]::IsInputRedirected) { $e = [Console]::In.ReadToEnd() | ConvertFrom-Json; if ($e.session_id) { [IO.File]::WriteAllText((Join-Path $Global:Mesa_Raiz 'sesion-claude.txt'), [string]$e.session_id) } }
     $mios = @(Mesa-Reclamos | Where-Object { (Mesa-NormalizarHerramienta $_.agente) -eq 'claude' } | ForEach-Object { "$($_.tarea) ($($_.hilo))" })
     "[Mesa] Eres claude en la mesa de agentes. Tus reclamos: $(if ($mios.Count) { $mios -join '; ' } else { 'ninguno' }). Protocolo en CLAUDE.md."
   }

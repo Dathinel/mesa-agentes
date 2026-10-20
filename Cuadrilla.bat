@@ -1,17 +1,17 @@
 @echo off
-rem Abre la Mesa de agentes: comprueba requisitos, archiva lo caducado, arranca el supervisor y el panel,
+rem Abre Cuadrilla: comprueba requisitos, archiva lo caducado, arranca el supervisor y el panel,
 rem y abre Windows Terminal con Claude, Codex, agy y el tablero.
-rem   Mesa.bat                 abre la mesa y reanuda la última conversación de Claude
-rem   Mesa.bat nuevo           igual, pero Claude empieza una conversación nueva
-rem   Mesa.bat panel codex     reabre el panel de un agente (codex o agy) en la ventana de la mesa
-rem   Mesa.bat diagnostico     resumen pegable en el chat (estados, versiones, errores; sin secretos)
-rem   Mesa.bat pruebas         pruebas de caos y de la mesa en una copia aislada
-rem   Mesa.bat cerrar          para el supervisor y el panel; los hilos quedan listos para retomar
-rem   Mesa.bat prueba          solo muestra la orden de Windows Terminal, sin abrir nada
+rem   Cuadrilla.bat                 abre la mesa y reanuda la última conversación de Claude
+rem   Cuadrilla.bat nuevo           igual, pero Claude empieza una conversación nueva
+rem   Cuadrilla.bat panel codex     reabre el panel de un agente (codex o agy) en la ventana de la mesa
+rem   Cuadrilla.bat diagnostico     resumen pegable en el chat (estados, versiones, errores; sin secretos)
+rem   Cuadrilla.bat pruebas         pruebas de caos y de la mesa en una copia aislada
+rem   Cuadrilla.bat cerrar          para el supervisor y el panel; los hilos quedan listos para retomar
+rem   Cuadrilla.bat prueba          solo muestra la orden de Windows Terminal, sin abrir nada
 rem Variables: MESA_TRABAJO (carpeta de trabajo de los agentes; por defecto la que contiene la mesa).
 setlocal EnableExtensions EnableDelayedExpansion
 chcp 65001 >nul
-title Mesa de agentes
+title Cuadrilla
 
 set "MESA=%~dp0"
 if "%MESA:~-1%"=="\" set "MESA=%MESA:~0,-1%"
@@ -33,7 +33,7 @@ if /i "%~1"=="prueba" ( echo COMANDO_WT: %WT% & goto fin )
 
 echo.
 echo  ==============================================================================
-echo   Mesa de agentes: Claude, Codex y agy coordinados por archivos
+echo   Cuadrilla: Claude, Codex y agy coordinados por archivos
 echo  ==============================================================================
 echo.
 echo   Carpeta de trabajo: %TRABAJO%
@@ -48,6 +48,8 @@ if "%FALTA%"=="1" (
   echo   Falta algún programa: la mesa abre igual, pero ese panel no funcionará.
 )
 echo.
+echo   Preparando la instalación (configuración e instrucciones de los agentes, solo si faltan)...
+%PSA% -File "%H%\instalar.ps1"
 echo   Archivando reclamos caducados y restos de la sesión anterior...
 %PSA% -File "%H%\mesa.ps1" limpiar
 
@@ -80,12 +82,12 @@ start "" %WT%
 goto fin
 
 :panel
-if /i not "%~2"=="codex" if /i not "%~2"=="agy" ( echo Uso: Mesa.bat panel codex^|agy & exit /b 1 )
+if /i not "%~2"=="codex" if /i not "%~2"=="agy" ( echo Uso: Cuadrilla.bat panel codex^|agy & exit /b 1 )
 start "" wt -w mesa new-tab --title %~2 -d "%MESA%" %PSA% -File "%H%\trabajador.ps1" -Agente %~2
 goto fin
 
 :cerrar
-rem Los hilos, reclamos y puntos de control quedan en datos\: al volver, Mesa.bat lo retoma todo.
+rem Los hilos, reclamos y puntos de control quedan en datos\: al volver, Cuadrilla.bat lo retoma todo.
 %PSA% -Command "Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | Where-Object { $_.CommandLine -match 'supervisor\.ps1|servidor\.ps1' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force; 'Parado: ' + ($_.CommandLine -replace '.*\\','') }"
 echo Cierra los paneles de Windows Terminal cuando sus agentes terminen: el encargo en curso queda en el hilo.
 goto fin

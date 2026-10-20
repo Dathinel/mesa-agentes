@@ -155,10 +155,12 @@ switch ($Comando) {
     # Solo si ese proceso sigue con este mismo intento: un panel que ya pasó al encargo siguiente no se toca.
     $enCurso = Mesa-LeerMensaje (Join-Path $Global:Mesa_Raiz "agentes\en-curso-$($m.llamada.pid).json")
     if (-not $enCurso -or $enCurso.hilo -ne $Hilo -or [int]$enCurso.n -ne $N -or $enCurso.intento -ne $m.llamada.intento) { throw "El proceso $($m.llamada.pid) ya no ejecuta #$N`: no se corta nada. Si quedó huérfano, usa reintentar." }
-    # Se corta el CLI (hijo del proceso que lo lanzó), no el panel: ejecutar.ps1 lo registra como fallo y el panel sigue.
-    $hijos = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($m.llamada.pid)" | Where-Object { $_.Name -notin @('powershell.exe', 'pwsh.exe', 'conhost.exe') })
-    foreach ($p in $hijos) { & taskkill.exe /PID $p.ProcessId /T /F | Out-Null }
-    Write-Output "CORTADO #$N`: $($hijos.Count) proceso(s) ($(@($hijos | ForEach-Object Name) -join ', ')). Luego: mesa.ps1 reintentar -Hilo $Hilo -N $N -De $De"
+    $ll = $m.llamada
+    if (-not $ll.cli_pid -or $enCurso.cli_pid -ne $ll.cli_pid -or $enCurso.cli_inicio -ne $ll.cli_inicio -or $enCurso.cli_nombre -ne $ll.cli_nombre -or
+        -not (Mesa-ProcesoVivo $ll.cli_pid $ll.cli_inicio $ll.cli_nombre)) { throw "La identidad del CLI de #$N ya no coincide: no se corta nada." }
+    # El Job de ejecutar.ps1 recoge todos los descendientes al morir su raíz, incluso si ya quedaron huérfanos.
+    Stop-Process -Id $ll.cli_pid -Force -ErrorAction Stop
+    Write-Output "CORTADO #$N`: CLI $($ll.cli_pid) ($($ll.cli_nombre)) y sus descendientes. Luego: mesa.ps1 reintentar -Hilo $Hilo -N $N -De $De"
   }
   'diagnostico' {
     # Por cmd: codex es un .ps1/.cmd de npm que escribe avisos en stderr y, con ErrorAction Stop, parecía no estar.
