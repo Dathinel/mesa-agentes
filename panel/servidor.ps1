@@ -110,9 +110,10 @@ try {
       $primera=($headers -split "`r`n")[0] -split ' '
       if ($primera.Count -ne 3) { continue }
       $metodo=$primera[0]; $path=($primera[1] -split '\?')[0]
-      $body=''; $contentType='text/plain; charset=utf-8'; $status=200; $ultimaVisita=Get-Date
+      $body=''; $contentType='text/plain; charset=utf-8'; $status=200; $ultimaVisita=Get-Date; $location=$null
       try {
-        if ($headers -notmatch ('(?im)^Host:\s*127\.0\.0\.1:'+ $listeningPort +'\s*$')) { $status=403; $body='Host no permitido' }
+        if ($headers -match ('(?im)^Host:\s*localhost:'+ $listeningPort +'\s*$')) { $status=302; $location="http://127.0.0.1:$listeningPort$($primera[1])"; $body='' }
+        elseif ($headers -notmatch ('(?im)^Host:\s*127\.0\.0\.1:'+ $listeningPort +'\s*$')) { $status=403; $body='Host no permitido' }
         elseif ($metodo -notin @('GET','HEAD')) { $status=405; $body='Solo lectura' }
         elseif ($path -in @('/','/resumen.html','/resumen.css','/resumen.js','/resumen-ejemplo.json','/oficina.html','/index.html','/oficina.js','/oficina.css','/arte-v1.js','/reclamos.js')) {
           # La vista Resumen es la portada; la oficina pixel art va en /oficina.html.
@@ -132,7 +133,6 @@ try {
             if ($headers -match '(?im)^X-Mesa-Token:\s*([^\r\n]+)') { $tokenRecibido = $matches[1].Trim() }
             elseif ($headers -match '(?im)^X-Token:\s*([^\r\n]+)') { $tokenRecibido = $matches[1].Trim() }
             elseif ($headers -match '(?im)^Authorization:\s*Bearer\s+([^\r\n]+)') { $tokenRecibido = $matches[1].Trim() }
-            elseif ($primera[1] -match '[?&]token=([^&\s]+)') { $tokenRecibido = [Uri]::UnescapeDataString($matches[1].Trim()) }
 
             # Comprobación de Origin y Referer
             $originVal = if ($headers -match '(?im)^Origin:\s*([^\r\n]+)') { $matches[1].Trim() } else { $null }
@@ -209,9 +209,10 @@ try {
           }
         }
       }
-      $reason=switch ($status) { 200 {'OK'}; 304 {'Not Modified'}; 400 {'Bad Request'}; 403 {'Forbidden'}; 404 {'Not Found'}; 405 {'Method Not Allowed'}; default {'Internal Server Error'} }
+      $reason=switch ($status) { 200 {'OK'}; 302 {'Found'}; 304 {'Not Modified'}; 400 {'Bad Request'}; 403 {'Forbidden'}; 404 {'Not Found'}; 405 {'Method Not Allowed'}; default {'Internal Server Error'} }
       $etagHeader = if ($etag) { "ETag: $etag`r`n" } else { '' }
-      $cabecera="HTTP/1.1 $status $reason`r`nContent-Type: $contentType`r`nContent-Length: $($bytes.Length)`r`n${etagHeader}Connection: close`r`nCache-Control: no-cache`r`nAllow: GET, HEAD`r`nX-Content-Type-Options: nosniff`r`nContent-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'`r`n`r`n"
+      $locHeader = if ($location) { "Location: $location`r`n" } else { '' }
+      $cabecera="HTTP/1.1 $status $reason`r`nContent-Type: $contentType`r`nContent-Length: $($bytes.Length)`r`n${locHeader}${etagHeader}Connection: close`r`nCache-Control: no-cache`r`nAllow: GET, HEAD`r`nX-Content-Type-Options: nosniff`r`nContent-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'`r`n`r`n"
       $hb=[Text.Encoding]::ASCII.GetBytes($cabecera); $stream.Write($hb,0,$hb.Length)
       if ($status -ne 304 -and $metodo -ne 'HEAD') { $stream.Write($bytes,0,$bytes.Length) }
     } catch { } finally { $client.Close() }
