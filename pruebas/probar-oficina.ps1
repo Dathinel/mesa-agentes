@@ -13,6 +13,8 @@ try {
   foreach ($c in $seguros) { Assert (-not (Vigia-Evaluar 'comando' $c $Global:Mesa_Base 'ejecucion')) "comando inocuo: $c" }
   foreach ($c in $peligrosos) { Assert ([bool](Vigia-Evaluar 'comando' $c $Global:Mesa_Base 'ejecucion')) "peligro reconocido: $c" }
   Assert (-not (Vigia-Evaluar 'comando' 'git branch -d integrada' $Global:Mesa_Base 'ejecucion')) 'borrado seguro de rama no equivale a -D'
+  Assert (-not (Vigia-Evaluar 'comando' ('cd "'+((Join-Path $env:USERPROFILE '.claude\projects\demo\memory') -replace '\\','/')+'" && ls') $Global:Mesa_Base 'ejecucion')) 'cd a la carpeta de un CLI no es salida'
+  Assert ((Vigia-Evaluar 'comando' 'cd C:\externo\otro && ls' $Global:Mesa_Base 'ejecucion').nivel -eq 'medio') 'cd fuera del ámbito sigue avisando'
   $masivo='Remove-Item '+((1..51|ForEach-Object { "f$_.txt" }) -join ',')
   Assert ((Vigia-Evaluar 'comando' $masivo $Global:Mesa_Base 'ejecucion').nivel -eq 'medio') 'borrado de 51 archivos'
   $parche=@(Mesa-Acciones @{timestamp=(Mesa-IsoNow);payload=@{type='custom_tool_call';name='apply_patch';input="*** Begin Patch`n*** Update File: panel/a.js`n+contenido no registrado`n*** Move to: panel/b.js`n*** End Patch"}})
@@ -54,6 +56,13 @@ try {
   [IO.File]::AppendAllText($ruta,"`n",(New-Object Text.UTF8Encoding $false))
   Invocar-Vigia
   Assert (@(Mesa-RegistroLocal (Join-Path $base 'datos\actividad.jsonl')).Count -eq $actividad.Count+1) 'la línea completada se ingiere una vez'
+  $ruta=Join-Path $base 'claude\sesion.jsonl'
+  $antes=@(Mesa-RegistroLocal (Join-Path $base 'datos\alertas.jsonl')).Count
+  foreach ($c in @('cd C:\externo\repetido','cd C:\externo\repetido','git push --force','git push --force')) {
+    Mesa-AnexarLinea $ruta (@{timestamp=(Mesa-IsoNow);message=@{model='claude-opus-prueba';content=@(@{type='tool_use';name='Bash';input=@{command=$c}})}}|ConvertTo-Json -Depth 10 -Compress)
+  }
+  Invocar-Vigia
+  Assert (@(Mesa-RegistroLocal (Join-Path $base 'datos\alertas.jsonl')).Count -eq $antes+3) 'aviso medio repetido se anota una vez; el alto, siempre'
   $f=Join-Path $base 'compartida.jsonl'; Mesa-AnexarLinea $f '{"ok":true}'
   $abierto=[IO.File]::Open($f,'Open','ReadWrite','ReadWrite')
   try { Assert (@(Mesa-Jsonl $f).Count -eq 1) 'lectura FileShare ReadWrite con escritor abierto' } finally { $abierto.Dispose() }

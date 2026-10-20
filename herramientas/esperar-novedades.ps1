@@ -1,4 +1,4 @@
-﻿# Bloquea hasta que llegue a la Mesa algo para este agente y lo imprime: así una sesión interactiva se entera sin que Daniel le escriba.
+﻿# Bloquea hasta que llegue a la Mesa algo para este agente y lo imprime: así una sesión interactiva se entera sin que la persona le escriba.
 # Uso (en segundo plano en la sesión del agente): esperar-novedades.ps1 -Para claude [-MaxMin 55] [-Intervalo 15]
 # Cuenta lo dirigido a mí o a 'todos', los avance inicio/alcance/bloqueo de cualquiera y los cambios de líder. Al salir, se vuelve a lanzar.
 param(

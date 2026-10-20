@@ -2,7 +2,7 @@
 $ErrorActionPreference = 'Stop'
 $env:MESA_RAIZ_PRUEBA = Join-Path $env:TEMP "mesa-relevo-$(Get-Random)"
 New-Item -ItemType Directory -Force (Join-Path $env:MESA_RAIZ_PRUEBA 'reclamos') | Out-Null
-Copy-Item (Join-Path $PSScriptRoot '..\datos\mesa.json') $env:MESA_RAIZ_PRUEBA
+Copy-Item (Join-Path $PSScriptRoot '..\datos\mesa.ejemplo.json') (Join-Path $env:MESA_RAIZ_PRUEBA 'mesa.json')
 . "$PSScriptRoot\..\herramientas\comun.ps1"
 $RaizHerramientas = Join-Path (Split-Path -Parent $PSScriptRoot) 'herramientas'
 $ast = [Management.Automation.Language.Parser]::ParseFile("$PSScriptRoot\..\herramientas\trabajador.ps1", [ref]$null, [ref]$null)

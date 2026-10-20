@@ -3,7 +3,8 @@
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 $Global:Mesa_Base = Split-Path -Parent $PSScriptRoot
-$Global:Mesa_Raiz = if ($env:MESA_RAIZ_PRUEBA) { $env:MESA_RAIZ_PRUEBA } else { Join-Path $Global:Mesa_Base 'datos' }
+# Carpeta de datos: MESA_DATOS (MESA_RAIZ_PRUEBA es su nombre antiguo y sigue valiendo) o datos\ junto a la mesa.
+$Global:Mesa_Raiz = if ($env:MESA_DATOS) { $env:MESA_DATOS } elseif ($env:MESA_RAIZ_PRUEBA) { $env:MESA_RAIZ_PRUEBA } else { Join-Path $Global:Mesa_Base 'datos' }
 $Global:Mesa_Hilos = Join-Path $Global:Mesa_Raiz 'hilos'
 $Global:Mesa_Registro = Join-Path $Global:Mesa_Raiz 'registro-tokens.jsonl'
 $Global:Mesa_Aprobaciones = Join-Path $Global:Mesa_Raiz 'aprobaciones.log'
@@ -49,6 +50,27 @@ function Mesa-CausaFallo([string]$texto) {
   $null
 }
 
+# Tipo de un encargo para decidir si se autoaprueba: lo declara quien delega (-Tipo) o se deduce de su carpeta.
+# lectura, mesa (escribe solo en la mesa), relevo: autoaprobables. repo, carpeta, red, irreversible: esperan a la persona.
+function Mesa-TipoEncargo($dir, $declarado) {
+  if ($declarado) { return $declarado }
+  if (-not $dir) { return 'carpeta' }
+  $d = [IO.Path]::GetFullPath($dir).TrimEnd('\') + '\'
+  if ($d.StartsWith($Global:Mesa_Base.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { return 'mesa' }
+  $p = $d.TrimEnd('\')
+  while ($p) { if (Test-Path -LiteralPath (Join-Path $p '.git')) { return 'repo' }; $p = Split-Path -Parent $p }
+  'carpeta'
+}
+
+# Modo de aprobación: «por-tipo» (por defecto), «todo» (lo de antes: se autoaprueba cualquier encargo de un agente de la lista) o «nada».
+function Mesa-Aprobacion($cfg) {
+  $a = $cfg.aprobacion
+  [pscustomobject]@{
+    modo = if ($a.modo) { [string]$a.modo } else { 'por-tipo' }
+    tipos = if ($a.autoaprobados) { @($a.autoaprobados) } else { @('lectura', 'mesa', 'relevo') }
+  }
+}
+
 function Mesa-IsoNow {
   (Get-Date).ToString('yyyy-MM-ddTHH:mm:sszzz')
 }
@@ -56,7 +78,9 @@ function Mesa-IsoNow {
 function Mesa-ConfigPath($customPath = $null) {
   if ($customPath) { return $customPath }
   if ($env:MESA_CONFIG) { return $env:MESA_CONFIG }
-  return (Join-Path $Global:Mesa_Raiz 'mesa.json')
+  $propia = Join-Path $Global:Mesa_Raiz 'mesa.json'
+  # Sin configuración propia (instalación nueva), la de ejemplo que trae el repositorio.
+  if (Test-Path -LiteralPath $propia) { return $propia } else { return (Join-Path $Global:Mesa_Base 'datos\mesa.ejemplo.json') }
 }
 
 function Mesa-LeerJson($ruta) {
@@ -70,6 +94,8 @@ function Mesa-LeerJson($ruta) {
 }
 
 $Global:Mesa_Excluidos = Mesa-Excluidos
+# Nombre de la persona que dirige la mesa en los hilos (autor de charlas, aprobaciones y escalados).
+$Global:Mesa_Humano = if ($env:MESA_HUMANO) { $env:MESA_HUMANO } else { @($(try { (Mesa-LeerJson (Mesa-ConfigPath)).humano } catch { $null }), 'usuario') | Where-Object { $_ } | Select-Object -First 1 }
 
 # Para recorrer hilos: un mensaje dañado se avisa y se salta en vez de cortar el listado entero.
 function Mesa-LeerMensaje($ruta) {

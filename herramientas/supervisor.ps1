@@ -1,5 +1,5 @@
 ﻿# Supervisor de la Mesa, sin modelo: cada -Intervalo segundos mira si algún agente murió, se colgó o se quedó sin cuota,
-# deja su estado en datos\agentes\<agente>.json, avisa al líder en el hilo y a Daniel con una notificación de Windows,
+# deja su estado en datos\agentes\<agente>.json, avisa al líder en el hilo y a la persona con una notificación de Windows,
 # y anota todo en la bitácora del día (datos\bitacora\AAAA-MM-DD.md). No reinicia nada salvo que mesa.json lo active.
 # Uso: supervisor.ps1 [-Intervalo 30] [-UnaVez] [-SinAvisos]
 param(
@@ -43,7 +43,7 @@ function Avisar($titulo, $texto) {
   } catch {}
 }
 
-# Cada problema se cuenta una vez, en tres partes: qué pasó, qué hizo el sistema y qué necesita de Daniel.
+# Cada problema se cuenta una vez, en tres partes: qué pasó, qué hizo el sistema y qué necesita de la persona.
 function Informar($clave, $memoria, $hilo, $para, $paso, $hice, $necesito) {
   if ($memoria.avisados.PSObject.Properties[$clave]) { return }
   $memoria.avisados | Add-Member $clave (Mesa-IsoNow)

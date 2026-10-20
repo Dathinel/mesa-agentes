@@ -1,6 +1,6 @@
 # Estado vivo de la mesa: hilos, reclamos, latidos, cuota, bitácora. Es personal y cambia a cada segundo.
 datos/*
-!datos/mesa.json
+!datos/mesa.ejemplo.json
 !datos/personajes.json
 !datos/reclamos/
 datos/reclamos/*
@@ -15,3 +15,9 @@ panel/puerto.txt
 *.log
 *.pid
 *.tmp.*
+
+# Instrucciones de los agentes y token del panel: se generan en cada instalación (herramientas\instalar.ps1, panel\servidor.ps1).
+/CLAUDE.md
+/AGENTS.md
+/GEMINI.md
+panel/token.txt

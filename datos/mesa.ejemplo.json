@@ -1,4 +1,5 @@
 {
+    "humano":  "usuario",
     "topes":  {
                   "codex":  {
                                 "hora":  4,
@@ -14,12 +15,22 @@
                              }
               },
     "autoaprobar":  [
-                        "Claude_nodo",
                         "claude",
                         "codex",
-                        "agy",
-                        "antigravity"
+                        "agy"
                     ],
+    "aprobacion":  {
+                       "modo":  "por-tipo",
+                       "autoaprobados":  [
+                                             "lectura",
+                                             "mesa",
+                                             "relevo"
+                                         ]
+                   },
+    "limites":  {
+                    "encargo_min":  90,
+                    "charla_min":  20
+                },
     "modelos":  {
                     "codex":  [
                                   "gpt-6.1-sol",
@@ -48,18 +59,6 @@
                                    "haiku"
                                ]
                 },
-    "coste_semilla":  {
-                          "flash":  1.1,
-                          "argon":  12.8,
-                          "claude_gpt":  3
-                      },
-    "cuota_manual":  {
-                         "fecha":  "2026-10-17T14:00",
-                         "claude_semanal_usado_pct":  93,
-                         "agy_flash_semanal_libre_pct":  97.55,
-                         "agy_argon_semanal_libre_pct":  29.58,
-                         "agy_claude_gpt_semanal_libre_pct":  9.12
-                     },
     "supervisor":  {
                        "relanzar":  false,
                        "max_relanzar":  3,
@@ -69,7 +68,15 @@
                        "latido_seg":  90,
                        "max_intentos":  3
                    },
+    "worktrees":  {
+                      "max_por_agente":  3
+                  },
+    "coste_semilla":  {
+                          "flash":  1.1,
+                          "argon":  12.8,
+                          "claude_gpt":  3
+                      },
     "claude_proyectos":  [
-                             "D--Programas-de-uso-libre*"
+
                          ]
 }

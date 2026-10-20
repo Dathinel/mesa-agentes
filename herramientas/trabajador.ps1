@@ -1,5 +1,5 @@
 ﻿# Panel de un agente en la Mesa: ejecuta a la vista los encargos que delegar.ps1 -Visible deja en cola para él
-# y, mientras espera, lo que Daniel escribe se le envía como charla, continuando su última conversación.
+# y, mientras espera, lo que escribe la persona se le envía como charla, continuando su última conversación.
 # Uso: trabajador.ps1 -Agente codex|agy|claude [-Intervalo <s>]. Sin -Agente atiende la cola de todos (sin charla).
 # Ctrl+C lo detiene; el encargo en curso queda en el hilo como «ejecutando».
 param(
@@ -82,7 +82,7 @@ El líder $lider no responde: $($espera.Count) mensaje(s) esperándolo desde $($
 3. Si $lider vuelve a escribir en el hilo, devuélvele el liderazgo con ``mesa.ps1 lider -Hilo $($d.Name) -Nuevo $lider -De $Agente`` y un traspaso de lo hecho.
 4. Al terminar, borra ``$candado``.
 "@, (New-Object System.Text.UTF8Encoding $false))
-    & "$PSScriptRoot\delegar.ps1" -A $Agente -Encargo $ruta -Hilo $d.Name -De $Agente -Dir $Global:Mesa_Base -Visible | Out-Null
+    & "$PSScriptRoot\delegar.ps1" -A $Agente -Encargo $ruta -Hilo $d.Name -De $Agente -Dir $Global:Mesa_Base -Tipo relevo -Visible | Out-Null
     Write-Host ("`n━━ {0} · RELEVO: {1} lidera {2} ({3} no responde)" -f (Get-Date -Format 'HH:mm'), $Agente, $d.Name, $lider) -ForegroundColor Red
   }
 }
@@ -90,12 +90,12 @@ El líder $lider no responde: $($espera.Count) mensaje(s) esperándolo desde $($
 function Charlar([string]$texto) {
   $h = Join-Path $PSScriptRoot 'mesa.ps1'
   if (-not (Test-Path -LiteralPath (Join-Path (Join-Path $Global:Mesa_Hilos $charla) 'hilo.json'))) {
-    & $h abrir -Hilo $charla -Titulo "Charla de Daniel con $Agente" -Lider daniel -Participantes "daniel,$Agente" | Out-Null
+    & $h abrir -Hilo $charla -Titulo "Charla de $($Global:Mesa_Humano) con $Agente" -Lider $Global:Mesa_Humano -Participantes "$($Global:Mesa_Humano),$Agente" | Out-Null
   }
-  $salida = (& $h enviar -Hilo $charla -De daniel -Para $Agente -Texto $texto | Select-Object -Last 1)
+  $salida = (& $h enviar -Hilo $charla -De $Global:Mesa_Humano -Para $Agente -Texto $texto | Select-Object -Last 1)
   if ($salida -notmatch '^(\d+)-') { Write-Host "No se pudo registrar el mensaje: $salida" -ForegroundColor Red; return }
   $n = [int]$Matches[1]
-  & $h aprobar -Hilo $charla -N $n -NoLanzar -Motivo 'charla de Daniel en el panel' | Out-Null
+  & $h aprobar -Hilo $charla -N $n -NoLanzar -Motivo 'charla en el panel' | Out-Null
   Correr $charla $n $script:sesion
 }
 
@@ -111,7 +111,7 @@ while ($true) {
     if ($Agente -and [Console]::KeyAvailable) {
       $t = Read-Host "Tú → $Agente"
       if ($t.Trim()) {
-        Write-Host ("`n━━ {0} · Daniel → {1}" -f (Get-Date -Format 'HH:mm'), $Agente) -ForegroundColor Magenta
+        Write-Host ("`n━━ {0} · {2} → {1}" -f (Get-Date -Format 'HH:mm'), $Agente, $Global:Mesa_Humano) -ForegroundColor Magenta
         Charlar $t
         Write-Host "━━ fin · esperando" -ForegroundColor DarkGray
       }

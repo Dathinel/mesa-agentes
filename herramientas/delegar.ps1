@@ -29,7 +29,11 @@ param(
 
   [switch]$Simular,
 
-  [switch]$Visible
+  [switch]$Visible,
+
+  # Qué hace el encargo, para la autoaprobación: lectura, mesa, relevo, repo, carpeta, red o irreversible. Sin él se deduce de -Dir.
+  [ValidateSet('lectura','mesa','relevo','repo','carpeta','red','irreversible')]
+  [string]$Tipo
 )
 if ($Simular) { $env:MESA_SIMULAR = '1' }
 
@@ -70,6 +74,7 @@ $paramsEnv = @{
   Esfuerzo = $Esfuerzo
 }
 if ($MesaJson) { $paramsEnv['MesaJson'] = $MesaJson }
+if ($Tipo) { $paramsEnv['Tipo'] = $Tipo }
 
 $salidaEnv = (& "$PSScriptRoot\mesa.ps1" enviar @paramsEnv | Select-Object -Last 1).Trim()
 $carpetaHilo = Join-Path $Global:Mesa_Hilos $Hilo

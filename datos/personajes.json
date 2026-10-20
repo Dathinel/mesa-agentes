@@ -1,9 +1,9 @@
 {
   "version": 1,
   "planes": {
-    "claude": "Claude Max x20",
-    "codex": "ChatGPT Plus",
-    "agy": "Google AI Pro"
+    "claude": "Claude",
+    "codex": "ChatGPT",
+    "agy": "Google AI"
   },
   "defecto": {
     "personalidad": "El explorador",

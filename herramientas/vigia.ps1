@@ -214,6 +214,7 @@ function Vigia-Evaluar([string]$Tipo, [string]$Valor, [string]$Cwd, [string]$Ope
         $resuelto = if ([IO.Path]::IsPathRooted($destino)) { [IO.Path]::GetFullPath($destino) } elseif ($Cwd) { [IO.Path]::GetFullPath((Join-Path $Cwd $destino)) } else { $destino }
         # Moverse dentro de la carpeta de programas o de temporales es trabajo normal.
         $dentro = $resuelto.StartsWith($Global:Mesa_DefaultDir, [StringComparison]::OrdinalIgnoreCase) -or $resuelto.StartsWith([IO.Path]::GetFullPath($env:TEMP), [StringComparison]::OrdinalIgnoreCase)
+        foreach ($cli in @('.claude','.codex','.gemini\antigravity-cli')) { if ($resuelto.StartsWith((Join-Path $env:USERPROFILE $cli) + '\', [StringComparison]::OrdinalIgnoreCase)) { $dentro=$true } }
         if (!$dentro) { $medio.Add('Salida de la carpeta de trabajo') }
       } catch {}
     }
@@ -276,6 +277,11 @@ function Invocar-Vigia {
             if ($limpio.Length -gt 200) { $limpio = $limpio.Substring(0,197) + '...' }
             $registro = [ordered]@{ agente=$agente; modelo=$modelo; hora=$a.hora; tipo=$a.tipo; valor=$limpio; herramienta=$a.herramienta; operacion=$a.operacion }
             Mesa-AnexarLinea (Join-Path $raiz 'actividad.jsonl') ($registro | ConvertTo-Json -Compress)
+            # Los avisos medios repetidos (mismo agente, motivo y valor) no se vuelven a anotar durante 15 min.
+            $claveAviso = "$agente|$($regla.motivo)|$limpio"
+            if ($regla -and $regla.nivel -eq 'medio') {
+              if ($recientes.ContainsKey($claveAviso)) { $regla = $null } else { $recientes[$claveAviso] = Mesa-IsoNow }
+            }
             if ($regla) {
               $registro.id = [Guid]::NewGuid().ToString('N').Substring(0,12)
               $registro.nivel = $regla.nivel; $registro.motivo = $regla.motivo

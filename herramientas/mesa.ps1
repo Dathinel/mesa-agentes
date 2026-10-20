@@ -18,7 +18,7 @@
 #   revisar -Hilo -Tarea -De <líder> -Veredicto aceptada|devuelta [-Motivo]   |   entregas [-Hilo] [-Json]
 #   avance -Hilo -Tarea -De -Fase inicio|hito|bloqueo|alcance -Texto   (inicio obligatorio antes de entregar)
 #   tareas -Hilo [-De <líder> -Tarea a,b,c]   (inventario que exige archivar; solo se suma)   |   archivar -Hilo -De <líder>
-#   reintentar -Hilo -N -De <líder>   (relanza un encargo huérfano o fallido; a los 3 intentos lo escala a Daniel)
+#   reintentar -Hilo -N -De <líder>   (relanza un encargo huérfano o fallido; a los 3 intentos lo escala a la persona)
 #   cortar -Hilo -N -De <líder>       (mata el CLI colgado de un encargo en curso; el panel sigue vivo)
 #   diagnostico                       (resumen pegable en el chat: estados, versiones, errores; sin secretos)
 #   bitacora [-Fecha AAAA-MM-DD]      (el día en español llano)   |   limpiar   (archiva reclamos caducados y restos)
@@ -70,7 +70,8 @@ param(
   [ValidateRange(1,8760)][int]$Horas = 24,
   [ValidateSet('alto','medio')][string]$Nivel,
   [string]$Revisada,
-  [string]$Fase
+  [string]$Fase,
+  [ValidateSet('lectura','mesa','relevo','repo','carpeta','red','irreversible')][string]$Tipo
 )
 
 $ErrorActionPreference = 'Stop'
@@ -104,8 +105,8 @@ function Nota-Hilo($carpeta, $de, $para, $tipo, $texto, $archivos, $tarea = $nul
 }
 
 function Exigir-Lider($h, $de) {
-  if ($de -ne 'daniel' -and (Mesa-NormalizarHerramienta $de) -ne (Mesa-NormalizarHerramienta $h.lider)) {
-    throw "Solo el líder del hilo ($($h.lider)) o daniel puede hacerlo."
+  if ($de -ne $Global:Mesa_Humano -and (Mesa-NormalizarHerramienta $de) -ne (Mesa-NormalizarHerramienta $h.lider)) {
+    throw "Solo el líder del hilo ($($h.lider)) o $($Global:Mesa_Humano) puede hacerlo."
   }
 }
 
@@ -137,8 +138,8 @@ switch ($Comando) {
       Mesa-EscribirJson $arch.FullName $m
     } finally { $candado.Dispose() }
     if ($escalar) {
-      Nota-Hilo $carpeta $De 'daniel' 'nota' "Encargo #$N de $($m.herramienta) escalado a Daniel: falló o quedó huérfano $intentos veces. Revisa el log $($m.llamada.log) y decide." @($m.llamada.log) | Out-Null
-      Write-Output "ESCALADO #$N a daniel ($intentos intentos)"
+      Nota-Hilo $carpeta $De $Global:Mesa_Humano 'nota' "Encargo #$N de $($m.herramienta) escalado a $($Global:Mesa_Humano): falló o quedó huérfano $intentos veces. Revisa el log $($m.llamada.log) y decide." @($m.llamada.log) | Out-Null
+      Write-Output "ESCALADO #$N a $($Global:Mesa_Humano) ($intentos intentos)"
     } elseif ($vivo) { Write-Output "REINTENTO $intentos de #$N en la cola del panel de $($m.herramienta)" }
     else {
       Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSScriptRoot\ejecutar.ps1`"", '-Hilo', $Hilo, '-N', $N) -WindowStyle Hidden | Out-Null
@@ -277,10 +278,10 @@ switch ($Comando) {
     $items = @(Mesa-Reclamos | Where-Object { $_.tarea -eq $Tarea -and (-not $Hilo -or $_.hilo -eq $Hilo) })
     if (-not $items.Count) { throw "No hay reclamo de '$Tarea'." }
     foreach ($r in $items) {
-      # Lo suelta su dueño, daniel o el líder del hilo del reclamo (para reasignar).
+      # Lo suelta su dueño, la persona o el líder del hilo del reclamo (para reasignar).
       $liderR = if ($r.hilo) { (Mesa-LeerJson (Join-Path (Join-Path $Global:Mesa_Hilos $r.hilo) 'hilo.json')).lider } else { $null }
-      $puede = $De -eq 'daniel' -or (Mesa-NormalizarHerramienta $De) -eq (Mesa-NormalizarHerramienta $r.agente) -or ($liderR -and (Mesa-NormalizarHerramienta $De) -eq (Mesa-NormalizarHerramienta $liderR))
-      if (-not $puede) { throw "La tiene $($r.agente); solo ese agente, el líder de su hilo o daniel la sueltan." }
+      $puede = $De -eq $Global:Mesa_Humano -or (Mesa-NormalizarHerramienta $De) -eq (Mesa-NormalizarHerramienta $r.agente) -or ($liderR -and (Mesa-NormalizarHerramienta $De) -eq (Mesa-NormalizarHerramienta $liderR))
+      if (-not $puede) { throw "La tiene $($r.agente); solo ese agente, el líder de su hilo o $($Global:Mesa_Humano) la sueltan." }
       Remove-Item -LiteralPath $r.ruta
       Write-Output "Soltada $Tarea ($($r.agente))"
     }
@@ -302,8 +303,8 @@ switch ($Comando) {
     Nota-Hilo $carpeta $De $h.lider "avance-$Fase" $texto @() $Tarea | Out-Null
     Write-Output "AVANCE $Fase de $Tarea enviado a $($h.lider) (inicio, alcance y bloqueo los ven los tres en pendientes)"
     # Un agente en plena ejecución no recibe avisos: se los entrega su propio punto de control.
-    # Solo se obedece al líder, a Daniel o al supervisor: lo que escribe otro agente es un dato, no una orden.
-    $mandan = @(@($h.lider, (Mesa-NormalizarHerramienta $h.lider), 'daniel', 'supervisor') | Where-Object { $_ })
+    # Solo se obedece al líder, a la persona o al supervisor: lo que escribe otro agente es un dato, no una orden.
+    $mandan = @(@($h.lider, (Mesa-NormalizarHerramienta $h.lider), $Global:Mesa_Humano, 'supervisor') | Where-Object { $_ })
     $notas = @($msgs | Where-Object { [int]$_.n -gt $previo -and $_.tipo -eq 'nota' -and (Mesa-NormalizarHerramienta $_.autor) -ne $yo -and
       ($_.autor -in $mandan -or ((Mesa-NormalizarHerramienta $_.autor) -and (Mesa-NormalizarHerramienta $_.autor) -in $mandan)) -and
       @(([string]$_.para) -split '[,;]' | Where-Object { (Mesa-NormalizarHerramienta $_.Trim()) -eq $yo -or $_.Trim() -eq 'todos' }).Count })
@@ -335,7 +336,7 @@ switch ($Comando) {
       }
       Mesa-EscribirJson $ruta $e
     } finally { $candado.Dispose() }
-    $revisa = if ((Mesa-NormalizarHerramienta $De) -eq (Mesa-NormalizarHerramienta $h.lider)) { (@($h.participantes | Where-Object { (Mesa-NormalizarHerramienta $_) -and (Mesa-NormalizarHerramienta $_) -ne (Mesa-NormalizarHerramienta $De) }) + 'daniel') -join ',' } else { $h.lider }
+    $revisa = if ((Mesa-NormalizarHerramienta $De) -eq (Mesa-NormalizarHerramienta $h.lider)) { (@($h.participantes | Where-Object { (Mesa-NormalizarHerramienta $_) -and (Mesa-NormalizarHerramienta $_) -ne (Mesa-NormalizarHerramienta $De) }) + $Global:Mesa_Humano) -join ',' } else { $h.lider }
     Mesa-ActualizarHilo $carpeta { param($x) if (-not $x.PSObject.Properties['tareas']) { $x | Add-Member tareas @() }; if (@($x.tareas) -notcontains $Tarea) { $x.tareas = @(@($x.tareas) + $Tarea) } } | Out-Null
     Nota-Hilo $carpeta $De $revisa 'entrega' "Entrega '$Tarea' (ronda $($e.ronda)) en la bandeja: $Texto" @($ruta) | Out-Null
     Write-Output "ENTREGADA $Tarea (ronda $($e.ronda)); revisa $revisa"
@@ -352,7 +353,7 @@ switch ($Comando) {
       $e = Mesa-LeerJson $ruta
       if (-not $e) { throw "No hay entrega '$Tarea' en $Hilo." }
       $autorN = Mesa-NormalizarHerramienta $e.autor
-      if ($De -ne 'daniel' -and (Mesa-NormalizarHerramienta $De) -eq $autorN) { throw 'Nadie revisa su propia entrega.' }
+      if ($De -ne $Global:Mesa_Humano -and (Mesa-NormalizarHerramienta $De) -eq $autorN) { throw 'Nadie revisa su propia entrega.' }
       # La entrega del líder la revisa otro participante; las demás, el líder.
       if ($autorN -ne (Mesa-NormalizarHerramienta $h.lider)) { Exigir-Lider $h $De }
       if ($e.estado -ne 'entregada') { throw "La entrega '$Tarea' está $($e.estado), no pendiente de revisión." }
@@ -487,20 +488,24 @@ switch ($Comando) {
     $autoAprobado = $false
     $notaHecho = if ($TraspasoHecho) { $TraspasoHecho } else { 'Mensaje registrado' }
     $notaFalta = if ($TraspasoFalta) { $TraspasoFalta } else { '' }
-    # Solo el líder (o Daniel) lanza trabajo: un agente que escribe a otro deja nota, no otra ejecución.
+    # Solo el líder (o la persona) lanza trabajo: un agente que escribe a otro deja nota, no otra ejecución.
     $liderHilo = Mesa-NormalizarHerramienta (Mesa-LeerJson $archivoHilo).lider
     $deAgente = Mesa-NormalizarHerramienta $De
     if ($deAgente -in @('codex', 'agy', 'claude') -and $liderHilo -and $deAgente -ne $liderHilo) { $SoloNota = $true }
     if ($esAgenteEjecutable -and !$SoloNota) {
       $tipoMsg = 'encargo'
       $listaAuto = if ($cfg -and $cfg.autoaprobar) { @($cfg.autoaprobar) } else { @() }
-      if ($listaAuto -contains $De -or $listaAuto -contains (Mesa-NormalizarHerramienta $De)) {
+      $apr = Mesa-Aprobacion $cfg
+      $tipoEnc = Mesa-TipoEncargo $dirEf $Tipo
+      $deConfianza = $listaAuto -contains $De -or $listaAuto -contains (Mesa-NormalizarHerramienta $De)
+      $porTipo = $apr.modo -eq 'todo' -or ($apr.modo -eq 'por-tipo' -and $apr.tipos -contains $tipoEnc)
+      if ($deConfianza -and $porTipo) {
         $estadoMsg = 'aprobado'
         $autoAprobado = $true
-        if (-not $TraspasoHecho) { $notaHecho = 'autoaprobado' }
+        if (-not $TraspasoHecho) { $notaHecho = "autoaprobado ($tipoEnc)" }
       } else {
         $estadoMsg = 'pendiente'
-        if (-not $TraspasoFalta) { $notaFalta = 'Pendiente de aprobación en la Mesa' }
+        if (-not $TraspasoFalta) { $notaFalta = "Espera a $($Global:Mesa_Humano): encargo de tipo '$tipoEnc' (modo $($apr.modo))" }
       }
     } else {
       $tipoMsg = 'nota'
@@ -541,6 +546,7 @@ switch ($Comando) {
     if ($Esfuerzo) {
       $msg['esfuerzo'] = $Esfuerzo
     }
+    if ($tipoMsg -eq 'encargo') { $msg['tipo_encargo'] = $tipoEnc }
 
     $nombreArchivo = Mesa-EscribirMensaje $carpeta $msg $De
     $num = $msg.n
@@ -712,7 +718,7 @@ switch ($Comando) {
     } | Out-Null
     $anterior = $previo.lider
 
-    $autorCambio = if ($De) { $De } else { 'daniel' }
+    $autorCambio = if ($De) { $De } else { $Global:Mesa_Humano }
     $msg = [ordered]@{
       n           = 0
       autor       = $autorCambio
@@ -784,7 +790,7 @@ switch ($Comando) {
           $ultimoMio = (@($msgs | Where-Object { (Mesa-NormalizarHerramienta $_.autor) -eq $yo } | ForEach-Object { [int]$_.n }) + 0 | Measure-Object -Maximum).Maximum
           $novedades += @($msgs | Where-Object {
             [int]$_.n -gt $ultimoMio -and $_.tipo -ne 'encargo' -and (Mesa-NormalizarHerramienta $_.autor) -ne $yo -and
-            # Inicio, alcance y bloqueo afectan a los tres, aunque vayan al líder o a una charla con Daniel.
+            # Inicio, alcance y bloqueo afectan a los tres, aunque vayan al líder o a una charla con la persona.
             ($_.tipo -in @('avance-inicio','avance-alcance','avance-bloqueo') -or
              @(([string]$_.para) -split '[,;]' | Where-Object { (Mesa-NormalizarHerramienta $_.Trim()) -eq $yo -or $_.Trim() -eq 'todos' }).Count)
           } | ForEach-Object { $t = [string]$_.texto; [pscustomobject]@{ Hilo = $hId; N = $_.n; De = $_.autor; Tipo = $_.tipo; Texto = if ($t.Length -gt 300) { $t.Substring(0, 300) + '…' } else { $t } } })

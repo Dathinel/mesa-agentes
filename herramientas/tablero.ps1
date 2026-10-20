@@ -88,7 +88,7 @@ do {
       } else { Linea $texto $color }
     }
     Linea
-    Linea 'Esperan a Daniel'
+    Linea "Esperan a $($Global:Mesa_Humano)"
     $pendientes = @($mensajes | Where-Object { $_.mensaje.estado -eq 'pendiente' })
     if (-not $pendientes.Count) { Linea '  Ninguno.' }
     foreach ($p in $pendientes) {
