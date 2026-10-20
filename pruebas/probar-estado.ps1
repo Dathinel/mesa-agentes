@@ -22,7 +22,6 @@ function Estado($a) { Get-Content -LiteralPath (Join-Path $raiz "agentes\$a.json
 Encargo 'prueba-escalada' 1 'codex' 'escalado' $null
 Encargo 'prueba-fallida' 2 'agy' 'fallo' ((Get-Date).AddMinutes(-3).ToString('o'))
 New-Item -ItemType Directory -Force (Join-Path $raiz 'agentes') | Out-Null
-[IO.File]::WriteAllText((Join-Path $raiz 'trabajador-claude.cerrado'), 'x')
 
 $supervisor = Join-Path $PSScriptRoot '..\herramientas\supervisor.ps1'
 & $supervisor -UnaVez -SinAvisos *> $null
@@ -35,7 +34,8 @@ foreach ($a in @('claude', 'codex', 'agy')) {
 }
 $codex = Estado 'codex'
 $claude = Estado 'claude'
-Comprobar 'claude con marca de cierre y sin encargo es apagado' ($claude.estado -eq 'apagado')
+# Claude no tiene panel: su estado sigue a la CLI abierta (apagado sin ella, libre con ella), sea cual sea el PC.
+Comprobar 'claude sigue a su CLI: apagado sin ella, libre con ella' (($null -eq $claude.proceso -and $claude.estado -eq 'apagado') -or ($null -ne $claude.proceso -and $claude.estado -eq 'libre'))
 $agy = Estado 'agy'
 Comprobar 'agy con encargo fallido es libre con alerta fallido' ($agy.estado -eq 'libre' -and $agy.alerta.tipo -eq 'fallido')
 Comprobar 'el encargo escalado lleva a esperando-daniel con su número' ($codex.motivo -match '#1 escalado')

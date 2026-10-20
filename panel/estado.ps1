@@ -91,8 +91,19 @@ function Estado-SalidaViva([string]$Ruta) {
     $buf = New-Object byte[] ($fs.Length - $ini); [void]$fs.Read($buf, 0, $buf.Length)
     $t = Mesa-Ocultar ([Text.Encoding]::UTF8.GetString($buf))
   } finally { $fs.Dispose() }
-  if ($t.Length -gt 1500) { $t = $t.Substring($t.Length - 1500) }
-  $t
+  # Los CLI escriben eventos JSON: se muestran sus comandos y sus textos, no el JSON.
+  $util = foreach ($l in ($t -split "`r?`n")) {
+    $l = $l.Trim()
+    if (!$l) { continue }
+    if ($l.StartsWith('{')) {
+      $o = $null; try { $o = $l | ConvertFrom-Json } catch { continue }
+      if ($o.item.command) { '$ ' + ($o.item.command -replace '^.*?-Command\s+', '') }
+      elseif ($o.item.text) { [string]$o.item.text }
+      continue
+    }
+    $l
+  }
+  (@($util | Where-Object { $_ } | Select-Object -Last 6) | ForEach-Object { Estado-Recorte $_ 160 }) -join "`n"
 }
 
 function Estado-Recorte([string]$s, [int]$max = 60) {
@@ -439,6 +450,7 @@ function Obtener-EstadoCompleto {
     $hilos+=$h
   }
   $hilos=@($hilos | Sort-Object actualizado -Descending)
+  $abiertos=@($hilos | Where-Object { $_.estado -eq 'abierto' } | ForEach-Object { $_.id })
   $reg=@(Mesa-RegistroLocal $Global:Mesa_Registro | Where-Object { $_.calidad -ne 'simulado' })
   $archivos=@(Mesa-Actividades 24)
   # El archivador muestra 80 alertas; acotar también ráfagas dentro de las 72 horas.
@@ -452,7 +464,7 @@ function Obtener-EstadoCompleto {
     if ((Mesa-NormalizarHerramienta $m.autor) -eq 'claude' -and $m.tipo -eq 'encargo' -and (Mesa-NormalizarHerramienta $m.para) -ne 'claude' -and $m.estado -in @('hecho','fallo')) { [pscustomobject]@{ dia=(Estado-Local $m.fecha).Date; ok=($m.estado -eq 'hecho') } }
   } })
   $procs=@()
-  try { $procs=@(Get-CimInstance Win32_Process -Property Name,ProcessId,ParentProcessId,CommandLine -ErrorAction Stop) } catch {
+  try { $procs=@(Get-CimInstance Win32_Process -Property Name,ProcessId,ParentProcessId,CommandLine,CreationDate -ErrorAction Stop) } catch {
     $procs=@(Get-Process -Name claude,codex,agy -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ Name=($_.ProcessName+'.exe'); ProcessId=$_.Id; ParentProcessId=0 } })
   }
 
@@ -755,6 +767,8 @@ function Obtener-EstadoCompleto {
     $agentes+=@{
       estado_detalle=$estadoDetalle; motivo=if ($contrato) { $contrato.motivo } else { 'sin datos del supervisor' }; desde=if ($contrato) { $contrato.desde } else { $null }
       alerta=if ($contrato) { $contrato.alerta } else { $null }; latido=if ($contrato) { $contrato.latido } else { $null }
+      panel=if ($contrato) { $contrato.panel } else { $null }
+      cli=if ($vivos.Count) { $raiz=@($vivos | Sort-Object CreationDate | Select-Object -First 1)[0]; [ordered]@{ pid=[int]$raiz.ProcessId; nombre=$raiz.Name; inicio=if ($raiz.CreationDate) { $raiz.CreationDate.ToString('o') } else { $null }; linea=Estado-Recorte "$($raiz.CommandLine)" 160 } } else { $null }
       despacho=$despachoObj
       calibracion=$calibracionObj
       operacion_animada=$operacionAnimada; pasos_plan=$pasos; carpetas=$carpetas; archivados=$archivados
@@ -808,6 +822,12 @@ function Obtener-EstadoCompleto {
   $noticias = Estado-Noticias $hilos $alertas $reg $now
 
   $ganador=@($agentes | Where-Object { $_.estadisticas.exitos7 -gt 0 } | Sort-Object { $_.estadisticas.exitos7 } -Descending | Select-Object -First 1)
+  # Franja de la oficina y tablero: un solo recuento (seis estados y «Te necesito») para que no se contradigan.
+  $cuentaEstados = [ordered]@{}
+  foreach ($k in @('trabajando', 'libre', 'esperando-daniel', 'sin-cuota', 'caido', 'apagado')) { $cuentaEstados[$k] = @($agentes | Where-Object { $_.estado -eq $k }).Count }
+  $aprobaciones = @($pendientes | Where-Object { "$($_.texto)" -match 'ESCALADO|aprobación' }).Count
+  $alertasNecesito = @($alertas | Where-Object { -not $_.revisada -and $_.nivel -eq 'alto' -and "$($_.motivo)" -notmatch 'cortado por' }).Count
+  $franja = [ordered]@{ estados = $cuentaEstados; te_necesito = $aprobaciones + $cuentaEstados['esperando-daniel'] + $cuentaEstados['caido'] + $alertasNecesito }
   return @{
     actualizado=if ($hilos -and $hilos.Count -and $hilos[0].actualizado) { $hilos[0].actualizado } else { (Mesa-IsoNow) }
     agentes=$agentes
@@ -827,12 +847,13 @@ function Obtener-EstadoCompleto {
     cuota=$cuota
     catalogo=$catalogo
     alertas=$alertas
+    franja=$franja
     empleado=if ($ganador.Count) { $ganador[0].nombre } else { $null }
     topes=$cfg.topes
     llamadas=(Mesa-ContadoresLlamadas)
     linea_tiempo=$lineaTiempo
     noticias=$noticias
     reclamos=@(Mesa-Reclamos)
-    entregas=@(Mesa-Entregas | Select-Object hilo,tarea,autor,estado,fecha,ronda,revisor,motivo)
+    entregas=@(Mesa-Entregas | Where-Object { $abiertos -contains $_.hilo } | Select-Object hilo,tarea,autor,estado,fecha,ronda,revisor,motivo)
   }
 }

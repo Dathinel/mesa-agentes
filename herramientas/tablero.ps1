@@ -61,6 +61,13 @@ do {
     $apr = Mesa-Aprobacion (Leer (Mesa-ConfigPath))
     if ($edadSup -lt 0 -or $edadSup -gt 90) { Linea ("Supervisor: PARADO $(if ($edadSup -ge 0) { '(último latido ' + (Antiguedad (Get-Item -LiteralPath $latSup).LastWriteTime.ToString('o')) + ')' }) · ábrelo con Cuadrilla.bat") 'Red' }
     else { Linea ("Supervisor: vivo ({0}) · aprobación: {1} (sin esperar: {2})" -f (Antiguedad (Get-Item -LiteralPath $latSup).LastWriteTime.ToString('o')), $apr.modo, ($apr.tipos -join ', ')) 'Gray' }
+    # La misma cuenta que la franja de la oficina (estado.ps1 → franja): así no pueden contradecirse.
+    $cache = Leer (Join-Path $Global:Mesa_Raiz 'estado-panel.json')
+    if ($cache -and $cache.franja) {
+      $e = $cache.franja.estados
+      Linea ("Franja: Trabajando {0} · Libre {1} · Esperando a Daniel {2} · Sin cuota {3}" -f $e.trabajando, $e.libre, $e.'esperando-daniel', $e.'sin-cuota') 'White'
+      Linea ("        Caído {0} · Apagado {1} · Te necesito: {2}" -f $e.caido, $e.apagado, $cache.franja.te_necesito) 'White'
+    } else { Linea 'Franja: sin datos de la oficina (no hay estado-panel.json)' 'Yellow' }
     Linea 'Agentes'
     foreach ($agente in @('claude', 'codex', 'agy')) {
       $color = @{ claude = 'DarkYellow'; codex = 'Green'; agy = 'Cyan' }[$agente]
