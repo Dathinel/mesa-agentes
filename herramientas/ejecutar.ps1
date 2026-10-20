@@ -186,7 +186,21 @@ function Ejecutar-Mensaje($carpetaHilo, $archivoMsg) {
     return $false
   }
 
-  $workDir = if ($m.dir -and (Test-Path -LiteralPath $m.dir)) { (Resolve-Path -LiteralPath $m.dir).Path } else { $Global:Mesa_DefaultDir }
+  # Sin la carpeta pedida no se trabaja en otra: el encargo queda pendiente con el motivo en tres partes.
+  if ($m.dir -and -not (Test-Path -LiteralPath $m.dir)) {
+    $motivo = "No existe la carpeta del encargo ($($m.dir)). Qué pasó: el encargo pedía trabajar ahí. Qué hizo el sistema: no lo lanzó. Qué necesita Daniel: crear la carpeta o corregir -Dir y volver a aprobar."
+    $m.estado = 'pendiente'
+    if (-not $m.traspaso) {
+      $m | Add-Member -NotePropertyName traspaso -NotePropertyValue ([ordered]@{ hecho = ''; falta = $motivo; archivos = @() }) -Force
+    } else {
+      $m.traspaso.falta = $motivo
+    }
+    Mesa-EscribirJson $archivoMsg $m
+    Mesa-AnexarLinea $Global:Mesa_Aprobaciones ("{0}`tCARPETA_INEXISTENTE`thilo={1}`tn={2}`therramienta={3}`tmotivo={4}" -f (Mesa-IsoNow), $hiloId, $m.n, $herramienta, $motivo)
+    Write-Warning "AVISO: No se lanza ${hiloId}#$($m.n): $motivo"
+    return $false
+  }
+  $workDir = if ($m.dir) { (Resolve-Path -LiteralPath $m.dir).Path } else { $Global:Mesa_DefaultDir }
   $modelo = if ($m.modelo) { $m.modelo } else { Mesa-ModeloPorDefecto $herramienta $cfg }
   $esfuerzo = if ($m.PSObject.Properties['esfuerzo'] -and $m.esfuerzo) { [string]$m.esfuerzo } else { 'medium' }
 
