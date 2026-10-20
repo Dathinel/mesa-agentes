@@ -25,7 +25,7 @@ try {
     @{ nombre='prefijo hermano'; ruta='C:\trabajo asignado\modelo-ajeno\pieza.stl'; nivel='alto' },
     @{ nombre='escape con puntos'; ruta='C:\trabajo asignado\modelo\..\ajeno\pieza.stl'; nivel='alto' },
     @{ nombre='nota no autoriza'; ruta='C:\solo-nota\pieza.stl'; nivel='alto' },
-    @{ nombre='ambito original'; ruta='D:\Programas de uso libre\proyecto\pieza.stl'; nivel='' },
+    @{ nombre='ambito original'; ruta=(Join-Path $Global:Mesa_DefaultDir 'proyecto\pieza.stl'); nivel='' },
     @{ nombre='temporal original'; ruta=(Join-Path $env:TEMP 'pieza.stl'); nivel='' },
     @{ nombre='cli original'; ruta=(Join-Path $env:USERPROFILE '.codex\resultado.txt'); nivel='' },
     @{ nombre='sensible conserva alerta'; ruta='C:\trabajo asignado\modelo\.env'; nivel='alto' }

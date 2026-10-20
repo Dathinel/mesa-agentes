@@ -20,7 +20,7 @@ try {
   $saneado=Mesa-SanearObjeto @{ texto='Bearer FALSO123'; objetos=@(@{ valor='X-Test-Token=FALSO123' }); cantidad=3 }
   $valido=$saneado|ConvertTo-Json -Depth 8|ConvertFrom-Json
   Assert ($valido.cantidad -eq 3 -and ($valido|ConvertTo-Json -Depth 8) -notmatch 'FALSO123') 'redacción conserva JSON válido y tipos'
-  foreach ($r in @('C:\externo\a.txt',(Join-Path $env:USERPROFILE '.claude\settings.json'),(Join-Path $env:USERPROFILE '.codex\config.toml'),'D:\Programas de uso libre\demo\.env','D:\Programas de uso libre\demo\auth.json')) {
+  foreach ($r in @('C:\externo\a.txt',(Join-Path $env:USERPROFILE '.claude\settings.json'),(Join-Path $env:USERPROFILE '.codex\config.toml'),(Join-Path $Global:Mesa_DefaultDir 'demo\.env'),(Join-Path $Global:Mesa_DefaultDir 'demo\auth.json'))) {
     Assert ((Vigia-Evaluar 'archivo' $r $Global:Mesa_Base 'escritura').nivel -eq 'alto') 'ruta sensible o fuera del ámbito'
   }
   foreach ($agente in @('claude','codex','agy')) {
