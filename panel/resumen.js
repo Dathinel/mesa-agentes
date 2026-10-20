@@ -96,7 +96,7 @@
       try {
         localStorage.setItem('mesa_vista_preferida', 'oficina');
       } catch (_) {}
-      window.location.href = 'index.html';
+      window.location.href = '/oficina.html';
     });
 
     // Alternar detalles técnicos
@@ -173,11 +173,14 @@
   // =========================================================================
   // Carga de Datos Resiliente
   // =========================================================================
+  let origenDatos = 'mesa';
+
   async function cargarDatos() {
     const params = new URLSearchParams(window.location.search);
     const forzarEjemplo = params.get('fuente') === 'ejemplo' || params.get('mock') === '1' || window.location.protocol === 'file:';
 
     let datos = null;
+    origenDatos = 'mesa';
 
     if (!forzarEjemplo) {
       try {
@@ -196,6 +199,7 @@
     }
 
     if (!datos) {
+      origenDatos = 'ejemplo';
       try {
         const respMock = await fetch('resumen-ejemplo.json', { cache: 'no-cache' });
         if (respMock.ok) {
@@ -262,6 +266,12 @@
   // Franja Superior de Frescura
   // =========================================================================
   function actualizarFranjaFrescura(datos) {
+    if (origenDatos === 'ejemplo') {
+      dom.textoFrescura.textContent = 'Sin conexión con la mesa: datos de ejemplo, no de hoy';
+      dom.puntoFrescura.className = 'punto-frescura frescura-rojo';
+      dom.alertaTrabajador.hidden = true;
+      return;
+    }
     const timestampStr = datos.generado || datos.actualizado;
     if (!timestampStr) {
       dom.textoFrescura.textContent = 'Datos disponibles (sin fecha)';

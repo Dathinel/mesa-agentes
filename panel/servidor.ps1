@@ -114,13 +114,15 @@ try {
       try {
         if ($headers -notmatch ('(?im)^Host:\s*127\.0\.0\.1:'+ $listeningPort +'\s*$')) { $status=403; $body='Host no permitido' }
         elseif ($metodo -notin @('GET','HEAD')) { $status=405; $body='Solo lectura' }
-        elseif ($path -in @('/','/index.html','/oficina.js','/oficina.css','/arte-v1.js','/reclamos.js')) {
-          $archivo=if ($path -eq '/') { 'index.html' } else { $path.TrimStart('/') }
+        elseif ($path -in @('/','/resumen.html','/resumen.css','/resumen.js','/resumen-ejemplo.json','/oficina.html','/index.html','/oficina.js','/oficina.css','/arte-v1.js','/reclamos.js')) {
+          # La vista Resumen es la portada; la oficina pixel art va en /oficina.html.
+          $archivo=switch ($path) { '/' { 'resumen.html' } '/oficina.html' { 'index.html' } default { $path.TrimStart('/') } }
           $body=[IO.File]::ReadAllText((Join-Path $panelDir $archivo),[Text.Encoding]::UTF8)
-          if ($archivo -eq 'index.html') {
-            $body = $body.Replace('__MESA_TOKEN__', $token)
+          if ($archivo -in @('index.html','resumen.html')) {
+            # Solo el valor: window.__MESA_TOKEN__ (el nombre) no se toca.
+            $body = [regex]::Replace($body, '(?<![\w.])__MESA_TOKEN__', $token)
           }
-          $contentType=switch ([IO.Path]::GetExtension($archivo)) { '.js' { 'application/javascript; charset=utf-8' }; '.css' { 'text/css; charset=utf-8' }; default { 'text/html; charset=utf-8' } }
+          $contentType=switch ([IO.Path]::GetExtension($archivo)) { '.js' { 'application/javascript; charset=utf-8' }; '.css' { 'text/css; charset=utf-8' }; '.json' { 'application/json; charset=utf-8' }; default { 'text/html; charset=utf-8' } }
         } elseif ($path.StartsWith('/api/')) {
           if ($path -eq '/api/ping') {
             $body='{"ok":true}'; $contentType='application/json; charset=utf-8'

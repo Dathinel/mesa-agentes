@@ -63,3 +63,7 @@ Prioridad si varias condiciones se cumplen: `caido` > `esperando-daniel` > `sin-
 - `datos\agentes\<agente>.json` se escribe de forma atómica (archivo temporal y renombrado).
 - Si el supervisor no ha escrito en más de 3 intervalos, la vista marca los datos como viejos, pero **no** cambia el `estado`.
 - El panel web no escribe este archivo. Las rutas del servidor siguen siendo de solo lectura.
+
+## «Te necesito» (la misma regla en la vista Resumen y en la oficina)
+
+Cuenta lo que espera a Daniel: los agentes en `caido` o `esperando-daniel`, las alertas de nivel `alto` sin revisar, y los pendientes cuyo texto pide aprobación o dice «ESCALADO».

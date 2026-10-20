@@ -22,6 +22,7 @@
   </div>
 
   <nav class="topbar-nav" aria-label="Navegación principal">
+    <a class="nav-btn" href="/" aria-label="Ir a la vista Resumen">Resumen</a>
     <button id="btn-toggle-view" class="nav-btn" aria-label="Alternar Planta o Despacho">Ver Despacho ⤢</button>
     <button id="btn-tv-mode" class="nav-btn" aria-label="Activar Modo TV automático">📺 Modo TV</button>
     <button id="btn-toggle-timeline" class="nav-btn" aria-label="Ver línea de tiempo del día">⏱ Línea de tiempo</button>
@@ -42,6 +43,7 @@
 
 <main class="main-viewport">
   <canvas id="office" aria-label="Oficina pixel art animada de Claude, Codex y agy"></canvas>
+  <div class="franja-urgente" id="franja-urgente" aria-live="polite"></div>
 
   <!-- Overlay para la vista de Despacho -->
   <div id="despacho-overlay" class="despacho-overlay" hidden>

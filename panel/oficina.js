@@ -122,6 +122,9 @@ const companyThemes = {
 
 const cv = $('office');
 const ctx = cv.getContext('2d', { alpha: false });
+const DPR = () => window.devicePixelRatio || 1;
+// Píxeles CSS que mide una unidad del lienzo en el último fotograma: decide si un texto es legible.
+let escalaCss = 1;
 
 // Helper para dibujo de píxeles
 const R = (x, y, w, h, col) => {
@@ -161,6 +164,8 @@ function fitText(txt, x, y, maxW, size = 6, col = '#fff', align = 'left', bold =
   const lo = min ?? Math.max(3.6, size * 0.82);
   ctx.font = fuente(sz, bold);
   while (sz > lo && ctx.measureText(s).width > maxW) { sz -= 0.2; ctx.font = fuente(sz, bold); }
+  // Por debajo de 9 px reales no se lee en pantalla: el texto se quita y queda en la vista Resumen.
+  if (sz * escalaCss < 9) return;
   if (ctx.measureText(s).width > maxW) {
     while (s.length > 1 && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
     s = s.trimEnd() + '…';
@@ -342,10 +347,11 @@ function updateDespachoHeader() {
   });
 }
 
+// Búfer a la resolución real de la pantalla (125% o 150% de escalado incluidos): sin borrosidad.
 function fit() {
   const rect = $('office').getBoundingClientRect();
-  cv.width = Math.round(rect.width);
-  cv.height = Math.round(rect.height);
+  cv.width = Math.round(rect.width * DPR());
+  cv.height = Math.round(rect.height * DPR());
   // Cambiar el tamaño borra el lienzo; en pausa no hay otro fotograma que lo repinte.
   draw(performance.now());
 }
@@ -1029,6 +1035,7 @@ async function refresh() {
     const prev = data;
     if (demoModo) ajustarDemo(next);
     data = next;
+    actualizarFranjaUrgente(next);
     detectarTransiciones(prev, next);
     if (!prev && demoModo) setTimeout(lanzarDemo, 1500);
     if (abrirPendiente) { const f = abrirPendiente; abrirPendiente = null; f(); }
@@ -2009,12 +2016,12 @@ function drawDeskMonitor(x, y, w, h, agent, t, on) {
 }
 
 // Cartel sobre la mesa cuando el agente no está («Vuelvo pronto», «En reunión»…).
-function cartelMesa(cx, y, texto, w = 54, size = 5) {
+function cartelMesa(cx, y, texto, w = 54, size = 5, alarma = false) {
   const h = size + 8;
   R(cx - w / 2 + 6, y + h - 1, 2, 5, '#5a3d28'); R(cx + w / 2 - 8, y + h - 1, 2, 5, '#5a3d28');
-  R(cx - w / 2 - 1, y - 1, w + 2, h + 2, '#78350f');
-  R(cx - w / 2, y, w, h, '#fef3c7');
-  fitText(texto, cx, y + h / 2 + 0.3, w - 6, size, '#7c2d12', 'center', true, size * 0.75);
+  R(cx - w / 2 - 1, y - 1, w + 2, h + 2, alarma ? '#7f1d1d' : '#78350f');
+  R(cx - w / 2, y, w, h, alarma ? '#fecaca' : '#fef3c7');
+  fitText(texto, cx, y + h / 2 + 0.3, w - 6, size, alarma ? '#7f1d1d' : '#7c2d12', 'center', true, size * 0.75);
 }
 
 // Pasantes: mesita auxiliar con su personaje (ropa de su modelo), monitor y tarea legible.
@@ -2139,10 +2146,9 @@ function drawSingleDespacho(agentId, offsetX, t, now) {
   drawDeskMonitor(dx + 104, dy - 52, 80, 48, agent, t, presente);
   hit('pantalla:' + agentId, 'Pantalla: archivo, herramienta e hilo', dx + 102, dy - 54, 84, 58, () => openInteractiveModal('monitor', { agentId, initialTab: 0 }));
 
-  if (!presente) {
-    const txt = lugar || (agent.estado === 'descansando' && agent.vuelve ? 'VUELVO ' + horaCorta(agent.vuelve) : 'VUELVO PRONTO');
-    cartelMesa(dx + 80, dy - 16, txt, 58);
-  }
+  // Un cartel por estado de la mesa: en reunión, sin cuota con la hora, o caído en rojo. Apagado no lleva cartel.
+  const cartel = lugar || (agent.estado_mesa === 'sin-cuota' ? 'SIN CUOTA' + (agent.vuelve ? ' · ' + horaCorta(agent.vuelve) : '') : agent.estado_mesa === 'caido' ? 'CAÍDO · reabre su panel' : null);
+  if (cartel) cartelMesa(dx + 80, dy - 16, cartel, 58, 5, agent.estado_mesa === 'caido');
 
   drawPasantesDespacho(agent, t, pasantesFuera(agentId, now));
   if (!(agent.pasantes_lista || []).length) V1.plant(612, 342, true);
@@ -2320,7 +2326,7 @@ function drawMeetingRoom(L, t, now) {
     fitText(colaReuniones.length ? `En cola: ${colaReuniones.map(c => ETIQUETA_REUNION[c.tipo]).join(' · ')}` : 'Sin reuniones en cola', x + w / 2, py + 46, pw - 16, 6, '#94a3b8', 'center');
   } else {
     const hAct = activeThread();
-    fitText('SALA LIBRE', x + w / 2, py + 17, pw - 16, 7.5, '#6ee7b7', 'center', true);
+    fitText(hAct ? 'SIN REUNIÓN' : 'SALA LIBRE', x + w / 2, py + 17, pw - 16, 7.5, '#6ee7b7', 'center', true);
     fitText(ultimaReunion ? `Última: ${ETIQUETA_REUNION[ultimaReunion.tipo]} · ${ultimaReunion.tema}` : `Hilo activo: ${hAct?.titulo || '—'}`, x + w / 2, py + 32, pw - 16, 6.5, '#fef08a', 'center');
     fitText(`♛ Líder: ${hAct?.lider || '—'} · ${hAct?.conteo_mensajes ?? (hAct?.mensajes || []).length} mensajes`, x + w / 2, py + 46, pw - 16, 6, '#94a3b8', 'center');
   }
@@ -2642,7 +2648,7 @@ function dibujarResalte() {
 // =========================================================================
 function draw(now) {
   // El búfer sigue al tamaño real del lienzo en cada fotograma: sin franjas al cambiar la ventana.
-  if (cv.clientWidth && (cv.width !== cv.clientWidth || cv.height !== cv.clientHeight)) { cv.width = cv.clientWidth; cv.height = cv.clientHeight; }
+  if (cv.clientWidth && (cv.width !== Math.round(cv.clientWidth * DPR()) || cv.height !== Math.round(cv.clientHeight * DPR()))) { cv.width = Math.round(cv.clientWidth * DPR()); cv.height = Math.round(cv.clientHeight * DPR()); }
   if (!cv.width || !cv.height) return;
   const t = paused ? 0 : now;
   hits = [];
@@ -2656,6 +2662,7 @@ function draw(now) {
 
   if (currentView === 'despacho') {
     const scale = Math.min(cv.width / 640, cv.height / 360);
+    escalaCss = scale / DPR();
     const offsetX = (cv.width - 640 * scale) / 2;
     const offsetY = (cv.height - 360 * scale) / 2;
     if (!paused) {
@@ -2670,6 +2677,7 @@ function draw(now) {
   } else {
     const PH = plantaAlto();
     const scale = Math.min(cv.width / 1440, cv.height / PH);
+    escalaCss = scale / DPR();
     ctx.setTransform(scale, 0, 0, scale, (cv.width - 1440 * scale) / 2, (cv.height - PH * scale) / 2);
     drawPlanta(t, now, PH);
   }
@@ -2682,11 +2690,23 @@ let lastFrame = 0;
 // Un solo reloj (performance.now) para dibujo y recorridos: el sello de rAF puede ir en otra base.
 function frame() {
   const t = performance.now();
-  if (!document.hidden && !paused && t - lastFrame >= 15) {
+  if (!document.hidden && !paused && t - lastFrame >= 33) {
     draw(t);
     lastFrame = t;
   }
   requestAnimationFrame(frame);
+}
+
+// Franja urgente: los seis estados de la mesa y lo que espera a Daniel (mismo recuento que la vista Resumen).
+function actualizarFranjaUrgente(d) {
+  const f = $('franja-urgente');
+  if (!f) return;
+  const cuenta = { trabajando: 0, libre: 0, 'esperando-daniel': 0, 'sin-cuota': 0, caido: 0, apagado: 0 };
+  for (const a of d?.agentes || []) if (a.estado_mesa in cuenta) cuenta[a.estado_mesa]++;
+  const aprobaciones = (d?.pendientes || []).filter(p => p.texto && (p.texto.includes('ESCALADO') || p.texto.includes('aprobación'))).length;
+  const necesito = aprobaciones + cuenta['esperando-daniel'] + cuenta.caido + (d?.alertas || []).filter(a => a.nivel === 'alto' && !a.revisada).length;
+  const etiquetas = [['trabajando', 'Trabajando'], ['libre', 'Libre'], ['esperando-daniel', 'Esperando a Daniel'], ['sin-cuota', 'Sin cuota'], ['caido', 'Caído'], ['apagado', 'Apagado']];
+  f.innerHTML = etiquetas.map(([k, t]) => `<span>${t}: ${cuenta[k]}</span>`).join('') + `<span class="necesito${necesito ? '' : ' cero'}">Te necesito: ${necesito}</span>`;
 }
 
 function clockTick() {

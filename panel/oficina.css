@@ -1393,3 +1393,9 @@ body:not(.mode-despacho) .despacho-overlay {
     padding-left: 0;
   }
 }
+
+/* Franja urgente: estados de la mesa y lo que espera a Daniel, también en modo TV. */
+.franja-urgente { position: fixed; left: 0; right: 0; bottom: 28px; z-index: 20; display: flex; gap: 14px; justify-content: center; align-items: center; padding: 6px 12px; background: rgba(9, 14, 21, 0.92); color: #e2e8f0; font: 600 13px system-ui, sans-serif; }
+.franja-urgente span { white-space: nowrap; }
+.franja-urgente .necesito { color: #fecaca; }
+.franja-urgente .necesito.cero { color: #94a3b8; }

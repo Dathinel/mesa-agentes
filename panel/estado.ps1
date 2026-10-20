@@ -754,7 +754,7 @@ function Obtener-EstadoCompleto {
 
     $agentes+=@{
       estado_detalle=$estadoDetalle; motivo=if ($contrato) { $contrato.motivo } else { 'sin datos del supervisor' }; desde=if ($contrato) { $contrato.desde } else { $null }
-      alerta=if ($contrato) { $contrato.alerta } else { $null }
+      alerta=if ($contrato) { $contrato.alerta } else { $null }; latido=if ($contrato) { $contrato.latido } else { $null }
       despacho=$despachoObj
       calibracion=$calibracionObj
       operacion_animada=$operacionAnimada; pasos_plan=$pasos; carpetas=$carpetas; archivados=$archivados

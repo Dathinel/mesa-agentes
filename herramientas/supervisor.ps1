@@ -73,7 +73,7 @@ function Contrato-Estado($a, $e, $escalado, $ultimo, [datetime]$ahora, $previo) 
   if ($e.estado -eq 'colgado') { $c.alerta = [ordered]@{ tipo = 'colgado'; texto = $e.motivo } }
   if ($c.estado -eq 'libre' -and $ultimo -and $ultimo.m.estado -in @('huerfano', 'fallo') -and $ultimo.fin -gt $ahora.AddHours(-24)) {
     $huerfano = $ultimo.m.estado -eq 'huerfano'
-    $c.alerta = [ordered]@{ tipo = if ($huerfano) { 'huerfano' } else { 'fallido' }; texto = "encargo #$($ultimo.m.n) de $($ultimo.hilo): $(if ($huerfano) { 'su proceso ya no existe' } else { 'terminó con error' }). Relánzalo con mesa.ps1 reintentar" }
+    $c.alerta = [ordered]@{ tipo = if ($huerfano) { 'huerfano' } else { 'fallido' }; texto = "encargo #$($ultimo.m.n) de $($ultimo.hilo): $(if ($huerfano) { 'su proceso ya no existe' } else { 'terminó sin éxito (fallo o corte)' }). Relánzalo con mesa.ps1 reintentar" }
   }
   $c.desde = if ($previo -and $previo.estado -eq $c.estado -and $previo.desde) { $previo.desde } else { Mesa-IsoNow }
   $c
@@ -149,7 +149,7 @@ function Vuelta {
             'lo marqué como huérfano; su reclamo y sus puntos de control siguen en el hilo' "que el líder lo relance con: mesa.ps1 reintentar -Hilo $($d.Name) -N $($m.n) -De <líder>"
           continue
         }
-        $estado[$a].estado = 'trabajando'; $estado[$a].hilo = $d.Name; $estado[$a].n = [int]$m.n; $estado[$a].motivo = "encargo #$($m.n) desde $($m.llamada.inicio)"
+        $estado[$a].estado = 'trabajando'; $estado[$a].hilo = $d.Name; $estado[$a].n = [int]$m.n; $estado[$a].motivo = "encargo #$($m.n) desde las $([datetime]::Parse($m.llamada.inicio).ToString('HH:mm'))"
         $cola = ''
         if ($log -and (Test-Path -LiteralPath $log)) { $fs = [IO.File]::Open($log, 'Open', 'Read', 'ReadWrite'); try { [void]$fs.Seek([Math]::Max(0, $fs.Length - 2000), 'Begin'); $cola = (New-Object IO.StreamReader($fs)).ReadToEnd() } finally { $fs.Dispose() } }
         $sinRed = $cola -match '(?i)waiting for network' -and ($ahora - [datetime]::Parse($m.llamada.inicio)).TotalMinutes -gt 10
