@@ -21,3 +21,6 @@ docs/interno/
 /CLAUDE.md
 /AGENTS.md
 /GEMINI.md
+
+# Dependencias del servidor MCP: se reconstruyen con npm ci en herramientas\mcp.
+node_modules/

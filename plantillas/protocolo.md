@@ -14,7 +14,7 @@ Te identificas como `claude`, `codex` o `agy`. Quien dirige la mesa es {HUMANO}.
 1. Mira `reclamos` e `hilos` por si otro ya lidera; reclama tu parte y **abre un hilo**: `.\mesa.ps1 abrir -Titulo "<tarea>" -Lider <yo> -Participantes "<yo>,<otros>"`.
 2. **Reparte**: mira la cuota (`.\cuota.ps1`), haz tú lo que exige criterio y delega lo pesado o mecánico, con el modelo más barato que sirva (lista en `mesa.json` → `modelos`).
 3. **Delega** con un encargo escrito (objetivo, rutas, reglas, puntos de control, criterio de terminado): `.\delegar.ps1 -A <codex|agy|claude> -Modelo <id> -Encargo <ruta.md> -Dir <carpeta> -Hilo <id> -De <yo> -Visible [-Tipo lectura|mesa|repo|red|irreversible] [-Worktree]`. Con `-Visible` va a la cola del panel del agente. Lo que no sea lectura ni escriba solo en la mesa espera la aprobación de {HUMANO}.
-4. **Revisa** cada entrega (informe, diff y pruebas) con `revisar`; un cambio de producto se une por PR con la CI en verde.
+4. **Revisa** cada entrega (informe, diff y pruebas) con `revisar`; un cambio de producto se une por PR con la CI en verde (en la propia Cuadrilla, que es solo local, con `Probar.bat` en verde).
 5. **Pasa el liderazgo** con traspaso cuando otro encaje mejor: `.\mesa.ps1 lider -Hilo <id> -Nuevo <agente>`.
 6. Si un agente edita fuera de su reclamo o calla hasta el final, dale tareas más pequeñas, cámbiale el modelo o reasigna su tarea.
 
