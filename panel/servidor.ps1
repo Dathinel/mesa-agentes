@@ -38,7 +38,8 @@ $trabajador = {
   . (Join-Path $panelDir 'estado.ps1')
   $ultimaCuota = [datetime]::MinValue
   while ($true) {
-    if (((Get-Date) - $ultimaCuota).TotalSeconds -ge 60) {
+    $inicioVuelta = Get-Date
+    if (((Get-Date) - $ultimaCuota).TotalSeconds -ge 120) {
       try { & (Join-Path $mesaBase 'herramientas\cuota.ps1') | Out-Null } catch { }
       $ultimaCuota = Get-Date
     }
@@ -59,7 +60,9 @@ $trabajador = {
         Move-Item -LiteralPath "$cacheArchivo.tmp" -Destination $cacheArchivo -Force
       } catch { }
     }
-    Start-Sleep -Seconds 3
+    # El cálculo del estado lee todos los registros: si tarda, se espera proporcionalmente para no comerse la CPU.
+    $duro = ((Get-Date) - $inicioVuelta).TotalSeconds
+    Start-Sleep -Seconds ([int][Math]::Max(3, [Math]::Min(30, 4 * $duro)))
   }
 }
 $script:job = $null
