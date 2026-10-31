@@ -215,15 +215,32 @@ Start-Sleep -Seconds 300
   try { $limpiar1 = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$h\worktrees.ps1" limpiar 2>&1 | Out-String } finally { $candado.Dispose() }
   $limpiar2 = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$h\worktrees.ps1" limpiar 2>&1 | Out-String
   Caso 'limpiar respeta el worktree con candado' 'con candado se queda; sin candado se quita (integrado y limpio)' "con=$($limpiar1.Trim()); sin=$($limpiar2.Trim())" ($limpiar1 -match 'Se queda \(codex tiene un encargo en marcha\)' -and $limpiar2 -match 'Quitado' -and -not (Test-Path $wt))
+  New-Item -ItemType Directory -Force (Join-Path $repo '.claude\worktrees\codex-medio') | Out-Null
+  $r = Delegar normal @('-A', 'codex', '-Encargo', (Encargo-Md 'medio.md'), '-Dir', $repo)
+  Caso 'carpeta de worktree a medias (sin .git) no se reutiliza' '3 con «quedó a medias»' "codigo=$($r.codigo), texto=$($r.texto.Trim())" ($r.codigo -eq 3 -and $r.texto -match 'quedó a medias')
+  Remove-Item -LiteralPath (Join-Path $repo '.claude\worktrees\codex-medio') -Recurse -Force
 
   # --- lectura ---
+  New-Item -ItemType Directory -Force (Join-Path $repo '.entorno') | Out-Null
   $antes = & git -C $repo status --porcelain | Out-String
   $r = Delegar normal @('-A', 'codex', '-Encargo', (Encargo-Md 'lee.md'), '-Dir', $repo, '-Lectura')
   $argsCodex = @(Mesa-LeerJson (Join-Path $r.carpeta 'argumentos.json'))
-  Caso '-Lectura: read-only, sin worktree' 'salida 0, -s read-only, cwd el repo, sin worktree' "codigo=$($r.codigo), wt=$($r.resultado.worktree), args=$($argsCodex -join ' ')" ($r.codigo -eq 0 -and -not $r.resultado.worktree -and $argsCodex -contains 'read-only' -and -not (Test-Path (Join-Path $repo '.claude\worktrees\codex-*')) -and ((& git -C $repo status --porcelain | Out-String) -eq $antes))
+  Caso '-Lectura: read-only, sin worktree ni --add-dir' 'salida 0, -s read-only, cwd el repo, sin worktree, sin --add-dir aunque exista .entorno' "codigo=$($r.codigo), wt=$($r.resultado.worktree), args=$($argsCodex -join ' ')" ($r.codigo -eq 0 -and -not $r.resultado.worktree -and $argsCodex -contains 'read-only' -and $argsCodex -notcontains '--add-dir' -and -not (Test-Path (Join-Path $repo '.claude\worktrees\codex-*')) -and ((& git -C $repo status --porcelain | Out-String) -eq $antes))
   $r = Delegar normal @('-A', 'agy', '-Encargo', (Encargo-Md 'lee2.md'), '-Dir', $repo, '-Lectura')
   $argsAgy = @(Mesa-LeerJson (Join-Path $r.carpeta 'argumentos.json'))
   Caso 'agy -Lectura va en plan' '--mode plan' ($argsAgy -join ' ') ($r.codigo -eq 0 -and $argsAgy -contains 'plan')
+
+  # --- instalar normaliza un mesa.json de la v1 ---
+  Copy-Item -LiteralPath (Join-Path $base 'herramientas\instalar.ps1') -Destination $h
+  New-Item -ItemType Directory -Force (Join-Path $raiz 'datos') | Out-Null
+  Copy-Item -LiteralPath (Join-Path $base 'datos\mesa.ejemplo.json') -Destination (Join-Path $raiz 'datos')
+  $datosV1 = Join-Path $raiz 'datos-v1'; New-Item -ItemType Directory -Force $datosV1 | Out-Null
+  [IO.File]::WriteAllText((Join-Path $datosV1 'mesa.json'), '{"topes":{"codex":{"hora":4}},"supervisor":{"relanzar":false},"modelos":{"codex":["mio"],"agy":["mio2"]},"limites":{"encargo_min":45},"worktrees":{"max_por_agente":2}}', $utf8)
+  $env:MESA_DATOS = $datosV1
+  $salidaInst = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$h\instalar.ps1" 2>&1 | Out-String
+  $env:MESA_DATOS = $datos
+  $n = Mesa-LeerJson (Join-Path $datosV1 'mesa.json')
+  Caso 'instalar normaliza mesa.json' 'solo modelos, limites y worktrees; conserva lo propio; añade inactivo_min=20; copia en mesa.v1.json' "claves=$($n.PSObject.Properties.Name -join ','), codex=$($n.modelos.codex), encargo=$($n.limites.encargo_min), inactivo=$($n.limites.inactivo_min), max=$($n.worktrees.max_por_agente); $($salidaInst.Trim())" (($n.PSObject.Properties.Name -join ',') -eq 'modelos,limites,worktrees' -and $n.modelos.codex -eq 'mio' -and $n.limites.encargo_min -eq 45 -and $n.limites.inactivo_min -eq 20 -and $n.worktrees.max_por_agente -eq 2 -and (Test-Path (Join-Path $datosV1 'mesa.v1.json')) -and $salidaInst -match 'Normalizado')
 } catch {
   $script:fallos++; Write-Host "ERROR de la prueba: $($_.Exception.Message) $($_.InvocationInfo.PositionMessage)"
 } finally {

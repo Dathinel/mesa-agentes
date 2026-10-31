@@ -3,7 +3,20 @@
 . "$PSScriptRoot\comun.ps1"
 New-Item -ItemType Directory -Force (Join-Path $Global:Mesa_Raiz 'trabajos') | Out-Null
 $cfg = Join-Path $Global:Mesa_Raiz 'mesa.json'
-if (-not (Test-Path -LiteralPath $cfg)) { Copy-Item -LiteralPath (Join-Path $Global:Mesa_Base 'datos\mesa.ejemplo.json') -Destination $cfg; "Creada $cfg" }
+$ejemplo = Join-Path $Global:Mesa_Base 'datos\mesa.ejemplo.json'
+if (-not (Test-Path -LiteralPath $cfg)) { Copy-Item -LiteralPath $ejemplo -Destination $cfg; "Creada $cfg" }
+else {
+  # Solo las claves del ejemplo (las de la v1 sobran) y las que falten se rellenan; el original queda en mesa.v1.json.
+  $ej = Mesa-LeerJson $ejemplo; $real = Mesa-LeerJson $cfg; $nuevo = [ordered]@{}
+  foreach ($k in $ej.PSObject.Properties.Name) {
+    $v = if ($null -ne $real.$k) { $real.$k } else { $ej.$k }
+    if ($ej.$k -is [Management.Automation.PSCustomObject]) { foreach ($s in $ej.$k.PSObject.Properties.Name) { if ($null -eq $v.$s) { $v | Add-Member NoteProperty $s $ej.$k.$s } } }
+    $nuevo[$k] = $v
+  }
+  if (($nuevo | ConvertTo-Json -Depth 10) -ne ($real | ConvertTo-Json -Depth 10)) {
+    Copy-Item -LiteralPath $cfg -Destination (Join-Path $Global:Mesa_Raiz 'mesa.v1.json'); Mesa-EscribirJson $cfg $nuevo; "Normalizado $cfg (el anterior queda en mesa.v1.json)"
+  }
+}
 $excl = Join-Path $Global:Mesa_Raiz 'excluidos.txt'
 if (-not (Test-Path -LiteralPath $excl)) { [IO.File]::WriteAllText($excl, "# Una expresión regular por línea: carpetas que ningún agente debe tocar ni mostrar.`r`n", (New-Object Text.UTF8Encoding $false)); "Creado $excl (vacío)" }
 $origen = Join-Path $Global:Mesa_Base 'plantillas\cuadrilla\SKILL.md'

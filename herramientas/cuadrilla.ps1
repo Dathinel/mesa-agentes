@@ -33,7 +33,9 @@ function Resultados {
 function Refrescar-Interrumpidos {
   foreach ($r in Resultados) {
     if ($r.estado -eq 'ejecutando' -and -not (Mesa-ProcesoVivo $r.lanzador.pid $r.lanzador.inicio $r.lanzador.nombre)) {
-      $r.estado = 'interrumpido'; $r.fin = Mesa-IsoNow; Mesa-EscribirJson (Join-Path $trabajos "$($r.id)\resultado.json") $r
+      # Se relee tras confirmar la muerte: el lanzador pudo escribir «hecho» y salir entre la lectura y la comprobación.
+      $f = Join-Path $trabajos "$($r.id)\resultado.json"; $r = Mesa-LeerJson $f
+      if ($r.estado -eq 'ejecutando') { $r.estado = 'interrumpido'; $r.fin = Mesa-IsoNow; Mesa-EscribirJson $f $r }
     }
   }
 }
@@ -169,7 +171,7 @@ $gitPares = @(@('core.hooksPath', $hooks), @('url.cuadrilla-sin-push://.pushInst
 switch ($A) {
   'codex' {
     $argumentos = @('exec', '--skip-git-repo-check', '-C', $trabajo, '-s', $(if ($Lectura) { 'read-only' } else { 'workspace-write' }))
-    if ($repo -and (Test-Path -LiteralPath (Join-Path $repo '.entorno'))) { $argumentos += @('--add-dir', (Join-Path $repo '.entorno')) }
+    if ($repo -and -not $Lectura -and (Test-Path -LiteralPath (Join-Path $repo '.entorno'))) { $argumentos += @('--add-dir', (Join-Path $repo '.entorno')) }
     if ($Red) { $argumentos += @('-c', 'sandbox_workspace_write.network_access=true') }
     # Codex quita del entorno de sus órdenes las variables con KEY en el nombre: las GIT_CONFIG_KEY_n se le pasan aparte.
     for ($i = 0; $i -lt $gitPares.Count; $i++) { $argumentos += @('-c', "shell_environment_policy.set.GIT_CONFIG_KEY_$i=`"$($gitPares[$i][0])`"") }

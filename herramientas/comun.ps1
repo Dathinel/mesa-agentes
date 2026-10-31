@@ -88,13 +88,14 @@ function Mesa-LeerJson($ruta) {
   try { return ($limpio | ConvertFrom-Json -ErrorAction Stop) } catch { throw "JSON dañado en ${ruta}: $($_.Exception.Message)" }
 }
 
-# Escritura atómica: archivo temporal y Move-Item, para que un apagón no deje un JSON a medias.
+# Escritura atómica: archivo temporal y File.Replace (Move-Item -Force borra y luego mueve), para que un apagón no deje un JSON a medias ni sin archivo.
 function Mesa-EscribirJson($ruta, $obj) {
   $carpeta = Split-Path -Parent $ruta
   if ($carpeta -and -not (Test-Path -LiteralPath $carpeta)) { New-Item -ItemType Directory -Force -Path $carpeta | Out-Null }
   $tmp = "$ruta.tmp.$PID.$([Guid]::NewGuid().ToString('N').Substring(0,6))"
   [IO.File]::WriteAllText($tmp, ($obj | ConvertTo-Json -Depth 10), (New-Object Text.UTF8Encoding $false))
-  Move-Item -LiteralPath $tmp -Destination $ruta -Force
+  # NullString y no $null: PowerShell pasaría "" y Replace lo rechaza como ruta de copia.
+  if (Test-Path -LiteralPath $ruta) { [IO.File]::Replace($tmp, $ruta, [NullString]::Value) } else { [IO.File]::Move($tmp, $ruta) }
 }
 
 function Mesa-ModeloPorDefecto($herramienta, $cfg) {

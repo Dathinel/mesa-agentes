@@ -38,7 +38,7 @@ Los CLI oficiales `codex` y `agy`, instalados y con la sesión iniciada en tu cu
 
 ## Pruebas
 
-`Probar.bat` corre `pruebas\probar-cuadrilla.ps1` (31 casos: salidas, rechazos, cortes, git) y `pruebas\caos-procesos.ps1` (17 casos del lanzador) en copias aisladas de `%TEMP%` con CLI falsos: no gasta cuota. `pruebas\probar-real.ps1` lanza un encargo de solo lectura a cada CLI real con modelos baratos.
+`Probar.bat` corre `pruebas\probar-cuadrilla.ps1` (33 casos: salidas, rechazos, cortes, git, instalación) y `pruebas\caos-procesos.ps1` (17 casos del lanzador) en copias aisladas de `%TEMP%` con CLI falsos: no gasta cuota. `pruebas\probar-real.ps1` lanza un encargo de solo lectura a cada CLI real con modelos baratos.
 
 ## Licencia
 

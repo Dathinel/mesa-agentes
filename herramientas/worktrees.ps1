@@ -55,7 +55,11 @@ switch ($Comando) {
     $max = [int]$(if ((Mesa-LeerJson (Mesa-ConfigPath)).worktrees.max_por_agente) { (Mesa-LeerJson (Mesa-ConfigPath)).worktrees.max_por_agente } else { 3 })
     $vivos = @(@(Repos) + $repo | Select-Object -Unique | ForEach-Object { Worktrees-Mesa $_ } | Where-Object { $_.agente -eq $Agente })
     $ruta = Join-Path $repo ".claude\worktrees\$Agente-$Tarea"
-    if (Test-Path -LiteralPath $ruta) { Write-Output $ruta; return }
+    if (Test-Path -LiteralPath $ruta) {
+      # Un apagón a mitad de git worktree add deja la carpeta sin su .git: no se arranca un CLI sobre un árbol a medias.
+      if (-not (Test-Path -LiteralPath (Join-Path $ruta '.git'))) { throw "$ruta existe pero no es un worktree (quedó a medias): bórralo y ejecuta git worktree prune en el repo" }
+      Write-Output $ruta; return
+    }
     if ($vivos.Count -ge $max) { throw "$Agente ya tiene $($vivos.Count) worktrees vivos (tope $max): $(@($vivos | ForEach-Object rama) -join ', '). Intégralos o límpialos antes." }
     # Que .claude\worktrees no aparezca como cambio del repo: exclusión local, sin tocar su .gitignore.
     $excl = Join-Path $repo '.git\info\exclude'
