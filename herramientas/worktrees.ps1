@@ -64,10 +64,15 @@ switch ($Comando) {
     & git -C $repo fetch --quiet origin 2>$null
     $base = Rama-Principal $repo
     $rama = "$Agente/$Tarea"
-    & git -C $repo show-ref --verify --quiet "refs/heads/$rama" 2>$null
-    if ($LASTEXITCODE -eq 0) { & git -C $repo worktree add --quiet $ruta $rama 2>&1 | Out-Null }
-    else { & git -C $repo worktree add --quiet -b $rama $ruta $base 2>&1 | Out-Null }
-    if (-not (Test-Path -LiteralPath $ruta)) { throw "git worktree add falló en $repo ($rama desde $base)." }
+    # Dos delegar a la vez sobre el mismo repo (codex y agy) chocan en los candados de git: se reintenta.
+    $error_ = ''
+    foreach ($intento in 1..3) {
+      & git -C $repo show-ref --verify --quiet "refs/heads/$rama" 2>$null
+      $error_ = if ($LASTEXITCODE -eq 0) { & git -C $repo worktree add --quiet $ruta $rama 2>&1 | Out-String } else { & git -C $repo worktree add --quiet -b $rama $ruta $base 2>&1 | Out-String }
+      if (Test-Path -LiteralPath $ruta) { break }
+      Start-Sleep -Seconds (2 * $intento)
+    }
+    if (-not (Test-Path -LiteralPath $ruta)) { throw "git worktree add falló en $repo ($rama desde $base): $($error_.Trim())" }
     Write-Output $ruta
   }
   'lista' {

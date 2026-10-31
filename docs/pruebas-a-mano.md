@@ -1,6 +1,13 @@
-> Describe la Cuadrilla v1 (etiqueta `cuadrilla-v1`). La versión actual, una sola orden sin procesos residentes, está en `cuadrilla-ligera.md` y D-003.
+> Lo de abajo describe la Cuadrilla v1 (etiqueta `cuadrilla-v1`); la ligera está en `cuadrilla-ligera.md` y D-003.
 
 # Pruebas a mano (las que solo puede juzgar una persona)
+
+## Cuadrilla ligera (D-003)
+1. **Desde el celular (Remote Control).** Pide a Claude que delegue algo mecánico de más de 10 min a codex o agy. Esperado: Claude sigue respondiendo mientras el encargo corre, y al terminar te llega un `PushNotification` de una línea con el resultado (hecho / fallo / causa). Si no llega, anota la hora y el id de `cuadrilla.ps1 estado`.
+2. **Cerrar la app a mitad.** Con un encargo en marcha, cierra Claude Code. Esperado: `cuadrilla.ps1 estado` lo enseña `interrumpido`, no queda ningún proceso de codex ni agy (Administrador de tareas), y repetir la misma orden lo retoma en el mismo worktree con la cabecera REINTENTO.
+3. **Un encargo que compile Rodaje.** Esperado: compila en el worktree con `--add-dir <repo>\.entorno`; si falla al restaurar paquetes, vuelve a lanzarlo con `-Red`.
+
+## Cuadrilla v1 (etiqueta `cuadrilla-v1`; ya retirada)
 
 Lo automático pasa (`Probar.bat`). Esto necesita tus ojos y tu ventana:
 

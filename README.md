@@ -9,7 +9,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/licencia-MIT-E8833A?style=flat-square&labelColor=1D1D1D" alt="Licencia MIT"></a>
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-E8833A?style=flat-square&labelColor=1D1D1D" alt="Windows 10 y 11">
   <img src="https://img.shields.io/badge/PowerShell-5.1-E8833A?style=flat-square&labelColor=1D1D1D&logo=powershell&logoColor=white" alt="PowerShell 5.1">
-  <img src="https://img.shields.io/badge/pruebas-49%2F49-E8833A?style=flat-square&labelColor=1D1D1D" alt="Pruebas 49 de 49">
+  <img src="https://img.shields.io/badge/pruebas-48%2F48-E8833A?style=flat-square&labelColor=1D1D1D" alt="Pruebas 48 de 48">
 </p>
 
 ## Qué necesitas
@@ -38,7 +38,7 @@ Los CLI oficiales `codex` y `agy`, instalados y con la sesión iniciada en tu cu
 
 ## Pruebas
 
-`Probar.bat` corre `pruebas\probar-cuadrilla.ps1` (32 casos: salidas, rechazos, cortes, git) y `pruebas\caos-procesos.ps1` (17 casos del lanzador) en copias aisladas de `%TEMP%` con CLI falsos: no gasta cuota. `pruebas\probar-real.ps1` lanza un encargo de solo lectura a cada CLI real con modelos baratos.
+`Probar.bat` corre `pruebas\probar-cuadrilla.ps1` (31 casos: salidas, rechazos, cortes, git) y `pruebas\caos-procesos.ps1` (17 casos del lanzador) en copias aisladas de `%TEMP%` con CLI falsos: no gasta cuota. `pruebas\probar-real.ps1` lanza un encargo de solo lectura a cada CLI real con modelos baratos.
 
 ## Licencia
 
