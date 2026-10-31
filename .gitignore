@@ -1,10 +1,6 @@
-# Estado vivo de la mesa: hilos, reclamos, latidos, cuota, bitácora. Es personal y cambia a cada segundo.
+# Datos de la instalación: configuración, exclusiones, encargos y trabajos. Es personal.
 datos/*
 !datos/mesa.ejemplo.json
-!datos/personajes.json
-!datos/reclamos/
-datos/reclamos/*
-!datos/reclamos/LEEME.md
 
 # Copias de versiones anteriores, historial de encargos y capturas de trabajo.
 anteriores/
@@ -17,10 +13,9 @@ docs/interno/
 *.pid
 *.tmp.*
 
-# Instrucciones de los agentes y token del panel: se generan en cada instalación (herramientas\instalar.ps1, panel\servidor.ps1).
-/CLAUDE.md
+# Instrucciones de los otros CLI, generadas por la v1 (ya no se usan).
 /AGENTS.md
 /GEMINI.md
 
-# Dependencias del servidor MCP: se reconstruyen con npm ci en herramientas\mcp.
-node_modules/
+# Worktrees de la propia mesa.
+.claude/worktrees/

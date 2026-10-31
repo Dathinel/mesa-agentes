@@ -39,7 +39,12 @@ function Worktrees-Mesa($repo) {
     }
   }
 }
-function Repos { @(Get-ChildItem -LiteralPath $Global:Mesa_DefaultDir -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName '.git') } | ForEach-Object FullName) }
+# A dos niveles: Herramientas-IA\Subtitular, Rastrear y Lanzador quedaban fuera de lista, limpiar y del tope.
+function Repos { @(Get-ChildItem -LiteralPath $Global:Mesa_DefaultDir -Directory -Depth 1 -ErrorAction SilentlyContinue | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName '.git') } | ForEach-Object FullName) }
+# Agente con un encargo en marcha: su candado datos	rabajos\<agente>.lock está tomado.
+function Ocupado($agente) {
+  try { $c = [IO.File]::Open((Join-Path $Global:Mesa_Raiz "trabajos\$agente.lock"), 'OpenOrCreate', 'ReadWrite', 'None'); $c.Dispose(); $false } catch { $true }
+}
 
 switch ($Comando) {
   'crear' {
@@ -72,9 +77,8 @@ switch ($Comando) {
   }
   'limpiar' {
     foreach ($w in @(Repos | ForEach-Object { Worktrees-Mesa $_ })) {
-      # Nunca se borra trabajo: con cambios sin confirmar o sin integrar, decide la persona.
-      $enUso = @(Mesa-Reclamos | Where-Object { $_.tarea -eq $w.tarea -and (Mesa-NormalizarHerramienta $_.agente) -eq $w.agente }).Count
-      if ($enUso) { "Se queda (tarea $($w.tarea) reclamada por $($w.agente)): $($w.ruta)"; continue }
+      # Nunca se borra trabajo: con cambios sin confirmar o sin integrar, decide la persona. Uno recién creado está «integrado y limpio»: se respeta mientras el agente trabaja.
+      if (Ocupado $w.agente) { "Se queda ($($w.agente) tiene un encargo en marcha): $($w.ruta)"; continue }
       if ($w.integrada -and $w.sin_confirmar -eq 0) {
         & git -C $w.repo worktree remove $w.ruta 2>&1 | Out-Null
         if ($LASTEXITCODE -eq 0) { & git -C $w.repo branch -d $w.rama 2>&1 | Out-Null; "Quitado (integrado y limpio): $($w.rama)" } else { "No se pudo quitar: $($w.ruta)" }

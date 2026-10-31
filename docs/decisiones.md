@@ -40,3 +40,17 @@
 | Prueba | `node herramientas\mcp\probar.mjs`: mesa aislada en `%TEMP%`, sin lanzar agentes |
 
 **Instalación en otra máquina.** Ejecuta `npm ci` en `herramientas\mcp`. Después añade a `mcpServers` de la config: `"cuadrilla": { "command": "<node.exe>", "args": ["<ruta>\\herramientas\\mcp\\servidor.mjs"] }`.
+
+## D-003: Cuadrilla ligera (25-oct-2026, construida el 31-oct)
+
+**Decisión.** Se sustituye la Cuadrilla de hilos, supervisor y panel (D-001, D-002) por una sola orden, `herramientas\cuadrilla.ps1`, que lanza un encargo a `codex exec` o `agy -p`, espera y termina. Claude la ejecuta en segundo plano y Claude Code le avisa al acabar: no hay cola, hook, sondeo ni proceso residente. Plan completo en `docs/cuadrilla-ligera.md`.
+
+**Por qué.** El panel y el supervisor gastaban un 34 % y un 12-15 % de un núcleo sin trabajo; había 141 encargos fantasma; agy se colgó dos veces 90 min con un log de 63 bytes; tres codex en paralelo agotaron la cuota; y la cuota, los costes y el vigía exigían leer transcritos de sesión. Lo mecánico lo resuelve una orden que valida antes de lanzar, un candado por CLI, un corte por silencio y un `resultado.json` atómico.
+
+**Lo que cambia.**
+- Código activo: de unas 13 000 líneas (herramientas 4 400 + panel 8 600) a 1 040 (`cuadrilla.ps1` 270, `proceso.ps1` 190, `comun.ps1` 105, `worktrees.ps1` 95, `instalar.ps1` 16, hook 4; pruebas aparte).
+- Datos: solo `datos\mesa.json`, `excluidos.txt`, `encargos\` y `trabajos\<id>\`. Lo de la v1 está en `datos\archivo\v1-2026-10-25\`.
+- Git en el CLI: hook `reference-transaction` por `GIT_CONFIG_COUNT` (solo en el entorno del proceso) que aborta commit, rama, reset, stash y el push a un remoto local; `pushInsteadOf` desvía https://, git@ y ssh://. Comprobado con CLI falsos (`probar-cuadrilla`); el resultado con los CLI reales está en «Bloqueo real» de `docs/cuadrilla-ligera.md`.
+- Se pierde: oficina, charla y relevo entre agentes, topes por hora, alertas del vigía y ver la cuota de codex antes de agotarla.
+
+**Vuelta atrás.** `git checkout cuadrilla-v1`, o `git revert` de los commits «Se retira…» y «Cuadrilla ligera (D-003)»; devolver `datos\archivo\v1-2026-10-25\*` a `datos\`; borrar `%USERPROFILE%\.claude\skills\cuadrilla`. Bundle: `D:\Respaldos\cuadrilla\cuadrilla-2026-10-25-v1.bundle`.

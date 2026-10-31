@@ -1,17 +1,17 @@
 @echo off
-rem Corre todas las pruebas de la Mesa en copias aisladas de %TEMP%, con agentes simulados: no gasta cuota ni toca datos\.
-rem   Probar.bat          todas
-rem   Probar.bat caos     solo las de caos
+rem Corre las pruebas de la Cuadrilla en copias aisladas de %TEMP%, con CLI falsos: no gasta cuota ni toca datos\.
+rem   Probar.bat                  todas
+rem   Probar.bat probar-cuadrilla solo una
 rem Variables: MESA_SIN_PAUSA=1 (sin pausa final).
 setlocal EnableExtensions
 chcp 65001 >nul
-title Mesa de agentes - pruebas
+title Cuadrilla - pruebas
 set "P=%~dp0pruebas"
 set "PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
 set FALLOS=0
-for %%T in (caos caos-procesos probar-relevo probar-vigia-ambito probar-oficina probar-panel) do (
+for %%T in (probar-cuadrilla caos-procesos) do (
   if /i "%~1"=="" call :una %%T
-  if /i "%~1"=="caos" if /i "%%T"=="caos" call :una %%T
+  if /i "%~1"=="%%T" call :una %%T
 )
 echo.
 if "%FALLOS%"=="0" ( echo Todas las pruebas pasaron. ) else ( echo Fallaron %FALLOS% conjuntos de pruebas. )

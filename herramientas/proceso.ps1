@@ -49,6 +49,7 @@ namespace Mesa {
     public bool Terminado { get { return proceso.HasExited; } }
     public int Codigo { get { return proceso.ExitCode; } }
     public string Fallo { get { return fallo; } }
+    public DateTime UltimaLinea { get; private set; }
 
     public static string Citar(string valor) {
       StringBuilder s = new StringBuilder("\"");
@@ -65,7 +66,7 @@ namespace Mesa {
       if (linea == null) return;
       lock (cerrojo) {
         if (cerrado) return;
-        try { log.WriteLine(linea); if (ver) lineas.Enqueue(linea); }
+        try { log.WriteLine(linea); UltimaLinea = DateTime.UtcNow; if (ver) lineas.Enqueue(linea); }
         catch (Exception e) { fallo = e.Message; }
       }
     }
@@ -82,6 +83,7 @@ namespace Mesa {
       info.RedirectStandardInput = true; info.RedirectStandardOutput = true; info.RedirectStandardError = true;
       info.StandardOutputEncoding = new UTF8Encoding(false); info.StandardErrorEncoding = new UTF8Encoding(false);
       proceso.StartInfo = info;
+      UltimaLinea = DateTime.UtcNow;
       proceso.OutputDataReceived += (s,e) => { if (e.Data == null) salidaFin.Set(); else Guardar(e.Data); };
       proceso.ErrorDataReceived += (s,e) => { if (e.Data == null) errorFin.Set(); else Guardar(e.Data); };
       proceso.Start();
@@ -129,16 +131,9 @@ namespace Mesa {
 '@
 }
 
-function Mesa-LimiteSegundos($cfg, [string]$hiloId) {
-  $clave = if ($hiloId -like 'charla-*') { 'charla_min' } else { 'encargo_min' }
-  $minutos = if ($clave -eq 'charla_min') { 20.0 } else { 90.0 }
-  if ($cfg.limites -and $cfg.limites.$clave -and [double]$cfg.limites.$clave -gt 0) { $minutos = [double]$cfg.limites.$clave }
-  return $minutos * 60.0
-}
-
 function Invocar-ProcesoMesa {
   param([string]$Ejecutable, [string[]]$Argumentos = @(), [string]$Entrada = '', [string]$Directorio,
-    [string]$Log, [double]$Segundos = 5400, [switch]$Ver, [scriptblock]$AlIniciar)
+    [string]$Log, [double]$Segundos = 5400, [double]$Inactivo = 0, [switch]$Ver, [scriptblock]$AlIniciar)
   $ruta = (Get-Command $Ejecutable -ErrorAction Stop | Select-Object -First 1).Source
   $shimCodex = Join-Path (Split-Path -Parent $ruta) 'node_modules\@openai\codex\bin\codex.js'
   if ([IO.Path]::GetFileNameWithoutExtension($ruta) -eq 'codex' -and [IO.Path]::GetExtension($ruta) -in @('.ps1', '.cmd') -and (Test-Path -LiteralPath $shimCodex)) {
@@ -162,7 +157,7 @@ function Invocar-ProcesoMesa {
   $argsTexto = (@($Argumentos | ForEach-Object { [Mesa.Proceso]::Citar($_) }) -join ' ')
   $proceso = New-Object Mesa.Proceso
   $reloj = [Diagnostics.Stopwatch]::StartNew()
-  $tiempo = $false
+  $tiempo = $false; $colgado = $false
   $identidadGuardada = -not $AlIniciar
   $siguienteIntento = 0.0
   try {
@@ -170,20 +165,22 @@ function Invocar-ProcesoMesa {
     $identidad = [pscustomobject]@{ cli_pid = $proceso.Id; cli_inicio = $proceso.Inicio; cli_nombre = $proceso.Nombre }
     while (-not $proceso.Terminado) {
       if ($reloj.Elapsed.TotalSeconds -ge $Segundos) { $tiempo = $proceso.CortarPorTiempo(); break }
+      # Un CLI mudo (agy se quedó 90 min con un log de 63 bytes) se corta como si venciera el tiempo.
+      if ($Inactivo -gt 0 -and ([DateTime]::UtcNow - $proceso.UltimaLinea).TotalSeconds -ge $Inactivo) { $colgado = $proceso.CortarPorTiempo(); break }
       if (-not $identidadGuardada -and $reloj.Elapsed.TotalSeconds -ge $siguienteIntento) {
         try { $identidadGuardada = (& $AlIniciar $identidad) -ne $false } catch { $identidadGuardada = $false }
         $siguienteIntento = $reloj.Elapsed.TotalSeconds + 1
       }
       if ($Ver) { while ($null -ne ($linea = $proceso.Siguiente())) { Mostrar-Linea $linea } }
-      Start-Sleep -Milliseconds 40
+      Start-Sleep -Milliseconds 500
     }
     $proceso.Drenar()
     if (-not $identidadGuardada) { try { & $AlIniciar $identidad | Out-Null } catch {} }
     if ($Ver) { while ($null -ne ($linea = $proceso.Siguiente())) { Mostrar-Linea $linea } }
-    $codigo = if ($tiempo) { 124 } else { $proceso.Codigo }
-    if ($proceso.Fallo -and -not $tiempo -and $codigo -eq 0) {
+    $codigo = if ($tiempo -or $colgado) { 124 } else { $proceso.Codigo }
+    if ($proceso.Fallo -and -not $tiempo -and -not $colgado -and $codigo -eq 0) {
       [IO.File]::AppendAllText($Log, "ERROR: $($proceso.Fallo)`n", (New-Object Text.UTF8Encoding $false)); $codigo = 1
     }
-    return [pscustomobject]@{ salida = $codigo; causa = $(if ($tiempo) { 'tiempo' } else { $null }); identidad = $identidad }
+    return [pscustomobject]@{ salida = $codigo; causa = $(if ($tiempo) { 'tiempo' } elseif ($colgado) { 'colgado' } else { $null }); identidad = $identidad }
   } finally { $proceso.Dispose() }
 }

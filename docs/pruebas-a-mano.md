@@ -1,3 +1,5 @@
+> Describe la Cuadrilla v1 (etiqueta `cuadrilla-v1`). La versión actual, una sola orden sin procesos residentes, está en `cuadrilla-ligera.md` y D-003.
+
 # Pruebas a mano (las que solo puede juzgar una persona)
 
 Lo automático pasa (`Probar.bat`). Esto necesita tus ojos y tu ventana:

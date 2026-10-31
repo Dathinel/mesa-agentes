@@ -1,3 +1,5 @@
+> Describe la Cuadrilla v1 (etiqueta `cuadrilla-v1`). La versión actual, una sola orden sin procesos residentes, está en `cuadrilla-ligera.md` y D-003.
+
 # Para retomar la mesa
 
 ## Estado (20 oct, 12:10)

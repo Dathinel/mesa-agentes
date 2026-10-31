@@ -1,3 +1,5 @@
+> Describe la Cuadrilla v1 (etiqueta `cuadrilla-v1`). La versión actual, una sola orden sin procesos residentes, está en `cuadrilla-ligera.md` y D-003.
+
 # Arquitectura de Cuadrilla
 
 Cuadrilla coordina en un mismo PC con Windows a tres agentes de línea de comandos: **Claude Code** (`claude`), **Codex CLI** (`codex`) y **Antigravity** (`agy`). No hay servidor, base de datos ni servicio externo: todo es PowerShell 5.1 y archivos JSON en disco. Cada agente lee y escribe esos archivos con `herramientas\mesa.ps1`, y varios procesos pequeños (supervisor, vigía, panel web) los observan.
