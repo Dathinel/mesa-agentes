@@ -69,35 +69,44 @@ if (Test-Path -LiteralPath $codexDir) {
       try {
         $obj = $ultimaLinea | ConvertFrom-Json
         $rl = if ($obj.payload -and $obj.payload.rate_limits) { $obj.payload.rate_limits } elseif ($obj.rate_limits) { $obj.rate_limits } else { $null }
-        if ($rl) {
+        # Un rate_limits sin primary es el aviso de límite alcanzado: la ventana está agotada desde esa hora.
+        if ($rl -and -not $rl.primary -and (-not $codexAgotadoDesde -or [string]$obj.timestamp -gt [string]$codexAgotadoDesde)) { $codexAgotadoDesde = $obj.timestamp }
+        # El archivo más nuevo puede no ser la sesión más reciente: se queda la marca de tiempo mayor con datos.
+        if ($rl -and $rl.primary -and (-not $codexObservado -or [string]$obj.timestamp -gt [string]$codexObservado)) {
           $codexObservado=$obj.timestamp
           if ($rl.primary) {
-            $codex5hPct = [double]$rl.primary.used_percent
+            # Cuando Codex rechaza por límite, el evento trae used_percent vacío: la ventana está agotada.
+            $codex5hPct = if ($null -eq $rl.primary.used_percent -or [string]$rl.primary.used_percent -eq '') { 100.0 } else { [double]$rl.primary.used_percent }
             if ($rl.primary.resets_at) {
               $codex5hIso = [DateTimeOffset]::FromUnixTimeSeconds([int64]$rl.primary.resets_at).ToLocalTime().ToString('yyyy-MM-ddTHH:mm:sszzz')
             }
           }
           if ($rl.secondary) {
-            $codexSemPct = [double]$rl.secondary.used_percent
+            $codexSemPct = if ($null -eq $rl.secondary.used_percent -or [string]$rl.secondary.used_percent -eq '') { $codexSemPct } else { [double]$rl.secondary.used_percent }
             if ($rl.secondary.resets_at) {
               $codexSemIso = [DateTimeOffset]::FromUnixTimeSeconds([int64]$rl.secondary.resets_at).ToLocalTime().ToString('yyyy-MM-ddTHH:mm:sszzz')
             }
           }
-          break
         }
       } catch {}
     }
   }
 }
+if ($codexAgotadoDesde -and (-not $codexObservado -or [string]$codexAgotadoDesde -gt [string]$codexObservado)) {
+  $codex5hPct = 100.0
+  $codexObservado = $codexAgotadoDesde
+  $codex5hIso = $null
+  $codexAgotado = $true
+}
 # La ventana de 5h y semanal se recuperan si ya pasó su reinicio (requisito 4b y 4c)
 $codex5hTrasReinicio = $false
 if ($codex5hIso -and ([DateTimeOffset]::Now -ge [DateTimeOffset]::Parse($codex5hIso))) {
-  $codex5hPct = 0.0
+  $codex5hPct = $null
   $codex5hTrasReinicio = $true
 }
 $codexSemTrasReinicio = $false
 if ($codexSemIso -and ([DateTimeOffset]::Now -ge [DateTimeOffset]::Parse($codexSemIso))) {
-  $codexSemPct = 0.0
+  $codexSemPct = $null
   $codexSemTrasReinicio = $true
 }
 
@@ -433,8 +442,8 @@ $codexSemLibre = if ($null -ne $codexSemPct) { [Math]::Round(100.0 - $codexSemPc
 $codex5hLibre  = if ($null -ne $codex5hPct) { [Math]::Round(100.0 - $codex5hPct, 2) } else { $null }
 $codexEfLibre  = if ($null -ne $codexSemLibre -and $null -ne $codex5hLibre) { [Math]::Min($codexSemLibre, $codex5hLibre) } elseif ($null -ne $codexSemLibre) { $codexSemLibre } else { $codex5hLibre }
 
-$codex5hDisp = if ($codex5hTrasReinicio) { "100% (tras reinicio)" } elseif ($null -ne $codex5hLibre) { "$codex5hLibre%" } else { "N/D" }
-$codexSemDisp = if ($codexSemTrasReinicio) { "100% (tras reinicio)" } elseif ($null -ne $codexSemLibre) { "$codexSemLibre%" } else { "N/D" }
+$codex5hDisp = if ($codexAgotado) { "0% (límite alcanzado; último aviso $codexObservado)" } elseif ($codex5hTrasReinicio) { "sin dato (ventana reiniciada; último dato $codexObservado)" } elseif ($null -ne $codex5hLibre) { "$codex5hLibre%" } else { "N/D" }
+$codexSemDisp = if ($codexSemTrasReinicio) { "sin dato (ventana reiniciada)" } elseif ($null -ne $codexSemLibre) { "$codexSemLibre%" } else { "N/D" }
 
 $flashEst = $agyGrupos['flash'].libre_pct_estimado
 $argonEst = $agyGrupos['argon'].libre_pct_estimado
