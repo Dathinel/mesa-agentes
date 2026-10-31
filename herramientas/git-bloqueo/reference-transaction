@@ -1,0 +1,4 @@
+#!/bin/sh
+# Cuadrilla: un CLI delegado no escribe refs (commit, rama, reset, stash). Claude revisa y confirma.
+[ "$1" = prepared ] && { echo "cuadrilla: git bloqueado en el encargo: no se escriben refs" >&2; exit 1; }
+exit 0
