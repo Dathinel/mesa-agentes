@@ -95,7 +95,11 @@ function Mesa-EscribirJson($ruta, $obj) {
   $tmp = "$ruta.tmp.$PID.$([Guid]::NewGuid().ToString('N').Substring(0,6))"
   [IO.File]::WriteAllText($tmp, ($obj | ConvertTo-Json -Depth 10), (New-Object Text.UTF8Encoding $false))
   # NullString y no $null: PowerShell pasaría "" y Replace lo rechaza como ruta de copia.
-  if (Test-Path -LiteralPath $ruta) { [IO.File]::Replace($tmp, $ruta, [NullString]::Value) } else { [IO.File]::Move($tmp, $ruta) }
+  if (-not (Test-Path -LiteralPath $ruta)) { [IO.File]::Move($tmp, $ruta); return }
+  # Replace falla si otro proceso (estado, el otro delegar) tiene el archivo abierto en ese instante: se reintenta.
+  foreach ($intento in 1..5) {
+    try { [IO.File]::Replace($tmp, $ruta, [NullString]::Value); return } catch [IO.IOException] { if ($intento -eq 5) { throw }; Start-Sleep -Milliseconds 50 }
+  }
 }
 
 function Mesa-ModeloPorDefecto($herramienta, $cfg) {

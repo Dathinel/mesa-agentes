@@ -106,7 +106,9 @@ if (-not $A -or -not $Encargo -or -not $Dir) { NoLanzado 'faltan -A, -Encargo o 
 foreach ($p in $Encargo, $Dir) { if ($p -match '[$(`]') { NoLanzado "la ruta lleva `$, ( o acento grave: $p" } }
 if (-not (Test-Path -LiteralPath $Encargo -PathType Leaf)) { NoLanzado "no existe el encargo $Encargo" }
 if (-not (Test-Path -LiteralPath $Dir -PathType Container)) { NoLanzado "no existe la carpeta $Dir" }
-$Encargo = (Resolve-Path -LiteralPath $Encargo).Path; $Dir = (Resolve-Path -LiteralPath $Dir).Path.TrimEnd('\')
+$Encargo = (Resolve-Path -LiteralPath $Encargo).Path; $Dir = (Resolve-Path -LiteralPath $Dir).Path
+if ($Dir -match '^[A-Za-z]:\\?$') { NoLanzado "no se delega una raíz de unidad: $Dir" }
+$Dir = $Dir.TrimEnd('\')
 foreach ($p in $Encargo, $Dir) { if ($p -match $Global:Mesa_Excluidos) { NoLanzado 'ruta excluida (datos\excluidos.txt)' } }
 $cli = Ruta-Cli $A
 if (-not $cli) { NoLanzado "$A no está en el PATH" }
@@ -129,7 +131,8 @@ if ($ultimo.causa -eq 'sin-cuota' -and $ultimo.hasta -and [datetime]::Parse($ult
 $vivo = $previos | Where-Object estado -eq 'ejecutando' | Select-Object -Last 1
 if ($vivo -and $vivo.tarea -eq $Tarea) { NoLanzado "la tarea $Tarea ya está viva ($($vivo.id))" }
 $hecho = $previos | Where-Object { $_.estado -eq 'hecho' -and $_.tarea -eq $Tarea -and $_.encargo_hash -eq $hash } | Select-Object -Last 1
-if ($hecho) { NoLanzado "ese .md ya se hizo ($($hecho.id)); escribe una corrección y relanza con -Tarea $Tarea" }
+# Con -Lectura no hay worktree que proteger: una revisión de lectura se repite cuando haga falta.
+if ($hecho -and -not $Lectura) { NoLanzado "ese .md ya se hizo ($($hecho.id)); escribe una corrección y relanza con -Tarea $Tarea" }
 # Candado: uno a la vez por CLI (el 24-oct, tres codex en paralelo agotaron la cuota). Windows lo suelta si el proceso muere.
 try { $candado = [IO.File]::Open((Join-Path $trabajos "$A.lock"), 'OpenOrCreate', 'ReadWrite', 'None') }
 catch { NoLanzado "$A ocupado$(if ($vivo) { " ($($vivo.id))" })" }

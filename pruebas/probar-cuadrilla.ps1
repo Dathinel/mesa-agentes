@@ -229,18 +229,29 @@ Start-Sleep -Seconds 300
   $r = Delegar normal @('-A', 'agy', '-Encargo', (Encargo-Md 'lee2.md'), '-Dir', $repo, '-Lectura')
   $argsAgy = @(Mesa-LeerJson (Join-Path $r.carpeta 'argumentos.json'))
   Caso 'agy -Lectura va en plan' '--mode plan' ($argsAgy -join ' ') ($r.codigo -eq 0 -and $argsAgy -contains 'plan')
+  $r = Delegar normal @('-A', 'agy', '-Encargo', (Join-Path $casos 'lee2.md'), '-Dir', $repo, '-Lectura')
+  Caso 'el mismo .md ya hecho se repite con -Lectura' 'salida 0 (no hay worktree que proteger)' "codigo=$($r.codigo), texto=$($r.texto.Trim())" ($r.codigo -eq 0)
+  $r = Delegar normal @('-A', 'codex', '-Encargo', (Join-Path $casos 'lee.md'), '-Dir', (Split-Path -Qualifier $repo), '-Lectura')
+  Caso 'una raíz de unidad como -Dir se rechaza' '3 con «raíz de unidad»' "codigo=$($r.codigo), texto=$($r.texto.Trim())" ($r.codigo -eq 3 -and $r.texto -match 'raíz de unidad')
+  # Mesa-EscribirJson con otro lector abierto (como ReadAllText de estado): File.Replace reintenta en vez de morir.
+  $js = Join-Path $casos 'ocupado.json'; Mesa-EscribirJson $js @{ n = 1 }
+  # Otro proceso lo abre con FileShare.Read, avisa con un marcador y lo suelta 120 ms después.
+  $marca = "$js.abierto"; $lector = Start-Process powershell.exe -ArgumentList @('-NoProfile', '-Command', "`$f = [IO.File]::Open('$js', 'Open', 'Read', 'Read'); [IO.File]::WriteAllText('$marca', '1'); Start-Sleep -Milliseconds 120; `$f.Dispose()") -WindowStyle Hidden -PassThru
+  Esperar { Test-Path -LiteralPath $marca }
+  $err = $null; try { Mesa-EscribirJson $js @{ n = 2 } } catch { $err = $_.Exception.Message }; $lector.WaitForExit()
+  Caso 'EscribirJson reintenta Replace con el archivo abierto' 'sin error y n=2' "err=$err, n=$((Mesa-LeerJson $js).n)" (-not $err -and (Mesa-LeerJson $js).n -eq 2)
 
   # --- instalar normaliza un mesa.json de la v1 ---
   Copy-Item -LiteralPath (Join-Path $base 'herramientas\instalar.ps1') -Destination $h
   New-Item -ItemType Directory -Force (Join-Path $raiz 'datos') | Out-Null
   Copy-Item -LiteralPath (Join-Path $base 'datos\mesa.ejemplo.json') -Destination (Join-Path $raiz 'datos')
   $datosV1 = Join-Path $raiz 'datos-v1'; New-Item -ItemType Directory -Force $datosV1 | Out-Null
-  [IO.File]::WriteAllText((Join-Path $datosV1 'mesa.json'), '{"topes":{"codex":{"hora":4}},"supervisor":{"relanzar":false},"modelos":{"codex":["mio"],"agy":["mio2"]},"limites":{"encargo_min":45},"worktrees":{"max_por_agente":2}}', $utf8)
+  [IO.File]::WriteAllText((Join-Path $datosV1 'mesa.json'), '{"topes":{"codex":{"hora":4}},"supervisor":{"relanzar":false},"modelos":{"codex":["mio"],"agy":["mio2"],"claude":["x"]},"limites":{"encargo_min":45,"charla_min":20},"worktrees":{"max_por_agente":2}}', $utf8)
   $env:MESA_DATOS = $datosV1
   $salidaInst = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$h\instalar.ps1" 2>&1 | Out-String
   $env:MESA_DATOS = $datos
   $n = Mesa-LeerJson (Join-Path $datosV1 'mesa.json')
-  Caso 'instalar normaliza mesa.json' 'solo modelos, limites y worktrees; conserva lo propio; añade inactivo_min=20; copia en mesa.v1.json' "claves=$($n.PSObject.Properties.Name -join ','), codex=$($n.modelos.codex), encargo=$($n.limites.encargo_min), inactivo=$($n.limites.inactivo_min), max=$($n.worktrees.max_por_agente); $($salidaInst.Trim())" (($n.PSObject.Properties.Name -join ',') -eq 'modelos,limites,worktrees' -and $n.modelos.codex -eq 'mio' -and $n.limites.encargo_min -eq 45 -and $n.limites.inactivo_min -eq 20 -and $n.worktrees.max_por_agente -eq 2 -and (Test-Path (Join-Path $datosV1 'mesa.v1.json')) -and $salidaInst -match 'Normalizado')
+  Caso 'instalar normaliza mesa.json' 'solo modelos, limites y worktrees (y sus subclaves); conserva lo propio; añade inactivo_min=20; copia en mesa.v1.json' "claves=$($n.PSObject.Properties.Name -join ','), codex=$($n.modelos.codex), encargo=$($n.limites.encargo_min), inactivo=$($n.limites.inactivo_min), max=$($n.worktrees.max_por_agente); $($salidaInst.Trim())" (($n.PSObject.Properties.Name -join ',') -eq 'modelos,limites,worktrees' -and ($n.modelos.PSObject.Properties.Name -join ',') -eq 'codex,agy' -and ($n.limites.PSObject.Properties.Name -join ',') -eq 'encargo_min,inactivo_min' -and $n.modelos.codex -eq 'mio' -and $n.limites.encargo_min -eq 45 -and $n.limites.inactivo_min -eq 20 -and $n.worktrees.max_por_agente -eq 2 -and (Test-Path (Join-Path $datosV1 'mesa.v1.json')) -and $salidaInst -match 'Normalizado')
 } catch {
   $script:fallos++; Write-Host "ERROR de la prueba: $($_.Exception.Message) $($_.InvocationInfo.PositionMessage)"
 } finally {

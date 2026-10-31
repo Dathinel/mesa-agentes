@@ -10,7 +10,7 @@ else {
   $ej = Mesa-LeerJson $ejemplo; $real = Mesa-LeerJson $cfg; $nuevo = [ordered]@{}
   foreach ($k in $ej.PSObject.Properties.Name) {
     $v = if ($null -ne $real.$k) { $real.$k } else { $ej.$k }
-    if ($ej.$k -is [Management.Automation.PSCustomObject]) { foreach ($s in $ej.$k.PSObject.Properties.Name) { if ($null -eq $v.$s) { $v | Add-Member NoteProperty $s $ej.$k.$s } } }
+    if ($ej.$k -is [Management.Automation.PSCustomObject]) { $o = [ordered]@{}; foreach ($s in $ej.$k.PSObject.Properties.Name) { $o[$s] = if ($null -ne $v.$s) { $v.$s } else { $ej.$k.$s } }; $v = $o }
     $nuevo[$k] = $v
   }
   if (($nuevo | ConvertTo-Json -Depth 10) -ne ($real | ConvertTo-Json -Depth 10)) {

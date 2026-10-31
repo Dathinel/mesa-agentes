@@ -1,4 +1,4 @@
-# Decisiones de Cuadrilla
+﻿# Decisiones de Cuadrilla
 
 ## D-001: Cuadrilla vive solo en local (20-oct-2026)
 
@@ -57,5 +57,11 @@
 **Prueba real (31-oct, criterio 2).** codex `gpt-6-luna` low y agy `gemini-3.8-flash-low` a la vez con `-Lectura` sobre `Herramientas-IA\Lanzador`: los dos `hecho` con salida 0 en 12 y 15 s, 56 131 y 25 343 tokens leídos del evento final, `cpu_lanzador_s` 0,67 y 0,78, `git status --porcelain` idéntico, ningún worktree y 0 procesos de la mesa antes y después.
 
 **Tras la revisión independiente (31-oct).** `estado` relee el `resultado.json` después de confirmar que el lanzador murió y solo lo marca interrumpido si sigue en ejecutando (antes podía pisar un «hecho» escrito en los últimos ms). Con `-Lectura` codex no recibe `--add-dir .entorno`. `Mesa-EscribirJson` usa `File.Replace` (atómico) en vez de `Move-Item -Force`. `worktrees.ps1 crear` rechaza una carpeta sin `.git` (apagón a mitad de `git worktree add`). El hook va fijado a LF en `.gitattributes`. `instalar.ps1` normaliza un `mesa.json` de la v1 (deja solo `modelos`, `limites` y `worktrees`, rellena `inactivo_min` y guarda el anterior en `mesa.v1.json`). `agy -p /usage --output-format text` comprobado con el CLI real: tabla de límites en 5 s.
+
+**Tras la revisión independiente, vuelta 2 (31-oct).** Un encargo ya «hecho» con el mismo .md y la misma tarea solo se rechaza cuando hay worktree que proteger: con `-Lectura` se repite (la prueba real y las revisiones de lectura relanzan el mismo .md). `Mesa-EscribirJson` reintenta `File.Replace` hasta cinco veces con 50 ms de pausa, porque `estado` o el otro `delegar` pueden tener abierto ese `resultado.json` en ese instante (antes el lanzador moría con la respuesta ya recogida y el encargo quedaba interrumpido). Una raíz de unidad como `-Dir` se rechaza. `instalar.ps1` también filtra las subclaves de `modelos` y `limites` (fuera `modelos.claude` y `limites.charla_min`).
+
+**Límites del bloqueo de git, dicho claro.** El hook y `pushInsteadOf` frenan el descuido, no a un CLI que quiera saltárselo: `pushInsteadOf` no cubre remotos `http://` ni rutas de red de otra máquina, y toda la configuración por `GIT_CONFIG_*` la anula un `git -c core.hooksPath=` o un entorno limpio. Quedan como segunda red los avisos de «HEAD del worktree se movió» y «cambió refs/remotes/origin/<rama>», que Claude lee antes de confirmar.
+
+**Pendiente (no bloquea).** `estado`, `delegar` y `cuota` leen todos los `resultado.json` de `datos\trabajos\` (y `estado` calcula dos hashes de la skill por llamada): con cientos de encargos el «menos de 1 s» se degradará; queda por hacer una poda que mueva a `datos\archivo\` lo de más de N días. Dos `delegar` a la vez sobre el mismo repo pueden añadir dos veces `/.claude/worktrees/` a `.git\info\exclude` (entre el `check-ignore` y el `Add-Content`); es inofensivo y no se arregla.
 
 **Vuelta atrás.** `git checkout cuadrilla-v1`, o `git revert` de los commits «Se retira…» y «Cuadrilla ligera (D-003)»; devolver `datos\archivo\v1-2026-10-25\*` a `datos\`; borrar `%USERPROFILE%\.claude\skills\cuadrilla`. Bundle: `D:\Respaldos\cuadrilla\cuadrilla-2026-10-25-v1.bundle`.
