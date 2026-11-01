@@ -77,6 +77,11 @@ switch ($Comando) {
       Start-Sleep -Seconds (2 * $intento)
     }
     if (-not (Test-Path -LiteralPath $ruta)) { throw "git worktree add falló en $repo ($rama desde $base): $($error_.Trim())" }
+    # Un worktree nace sin los submódulos (externo/rodaje): el CLI se paraba al no encontrar sus scripts. Necesita red; si falla, se avisa y sigue.
+    if (Test-Path -LiteralPath (Join-Path $ruta '.gitmodules')) {
+      $sub = & git -C $ruta submodule update --init --depth 1 2>&1 | Out-String
+      if ($LASTEXITCODE -ne 0) { Write-Warning "submódulos sin inicializar en $ruta (¿sin red?): $($sub.Trim())" }
+    }
     Write-Output $ruta
   }
   'lista' {

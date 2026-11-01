@@ -96,9 +96,9 @@ function Mesa-EscribirJson($ruta, $obj) {
   [IO.File]::WriteAllText($tmp, ($obj | ConvertTo-Json -Depth 10), (New-Object Text.UTF8Encoding $false))
   # NullString y no $null: PowerShell pasaría "" y Replace lo rechaza como ruta de copia.
   if (-not (Test-Path -LiteralPath $ruta)) { [IO.File]::Move($tmp, $ruta); return }
-  # Replace falla si otro proceso (estado, el otro delegar) tiene el archivo abierto en ese instante: se reintenta.
-  foreach ($intento in 1..5) {
-    try { [IO.File]::Replace($tmp, $ruta, [NullString]::Value); return } catch [IO.IOException] { if ($intento -eq 5) { throw }; Start-Sleep -Milliseconds 50 }
+  # Replace falla si otro proceso (estado, el otro delegar) tiene el archivo abierto en ese instante: se reintenta hasta 1 s (con la CPU saturada, un lector de 120 ms tardaba más de 250 ms en soltarlo).
+  foreach ($intento in 1..20) {
+    try { [IO.File]::Replace($tmp, $ruta, [NullString]::Value); return } catch [IO.IOException] { if ($intento -eq 20) { throw }; Start-Sleep -Milliseconds 50 }
   }
 }
 
